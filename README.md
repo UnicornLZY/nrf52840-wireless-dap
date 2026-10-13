@@ -63,22 +63,13 @@ arduino-cli core install adafruit:nrf52@1.7.0 --additional-urls https://adafruit
 ## 源码结构
 
 ```text
-libraries/WirelessDAP/src/   DAP、USB、会话、UART、RADIO实现
-libraries/WirelessDAP/src/arm/  固定版本ARM CMSIS-DAP源码
-variant/                    板级GPIO映射
-unified_dap/                Arduino入口
-tests/                      桌面模型和模拟外设
-tools/verify_uf2.py          UF2结构检查
-docs/                       使用、构建、验证和上传指南
-licenses/                   第三方许可与声明
+libraries/WirelessDAP/src/      DAP、USB、会话、UART、RADIO实现
+libraries/WirelessDAP/src/arm/  ARM CMSIS-DAP源码
+variant/                        板级GPIO映射
+unified_dap/                    Arduino入口
+tests/                          桌面模型和模拟外设
+tools/verify_uf2.py             UF2结构检查
+docs/                           使用、构建与验证说明
 ```
 
-原始开发目录中的其他V2/V3/V4实验未纳入主线；开发经过见 [开发摘要](docs/DEVELOPMENT.md)。[上传GitHub教程](docs/GITHUB_UPLOAD.md)提供首次上传和更新操作。
-
-## 许可证与来源
-
-本项目自编代码使用 [MIT](LICENSE)；`src/arm/` 保留ARM的Apache-2.0许可。安装的Adafruit Core、TinyUSB、Nordic SDK等依赖遵循各自原许可，MIT不覆盖这些组件或整个链接后固件。详见 [第三方声明](THIRD_PARTY_NOTICES.md)。
-
-这是独立CMSIS-DAP实现，不是Arm官方DAPLink固件，也没有拖拽目标程序烧录功能。USB VID/PID沿用个人开发配置，没有获得USB标识授权；商业发布应使用自身合法标识。
-
-参考：[Arm CMSIS-DAP](https://github.com/ARM-software/CMSIS-DAP)、[Adafruit nRF52 Core](https://github.com/adafruit/Adafruit_nRF52_Arduino)、[板卡厂家](https://www.nologo.tech/product/otherboard/NRF52840.html)。
+开发经过见 [开发摘要](docs/DEVELOPMENT.md)，板卡硬件参数参考 [nRF52840 开发板资料](https://www.nologo.tech/product/otherboard/NRF52840.html)。
