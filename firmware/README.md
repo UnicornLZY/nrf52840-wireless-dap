@@ -1,9 +1,8 @@
-# Firmware outputs
+# Firmware Directory
 
-The repository tracks source, not generated firmware binaries. Run `../build.ps1` from the repository root to generate the UART-latency UF2 here.
+运行仓库根目录的 `.\build.ps1` 后，编译生成的 `.uf2` 固件会输出到此目录：
 
-Reference name: `uart_latency_packet128_unified_v3_p113_2m_fast_ch40.uf2`
+- 默认输出文件名：`uart_latency_packet128_unified_v3_p113_2m_fast_ch40.uf2`
+- 应用起始地址：`0x26000`（适用于带有 nice!nano / Adafruit S140 6.1.1 UF2 Bootloader 的 nRF52840 开发板）
 
-Reference SHA256: `7E3C4C9DACCF2E4EE8F4F7374D04B86C9DC7B918FE94259589ED8AC29D928147`
-
-Both boards must use the same image. This baseline is a test candidate; publishing source does not constitute hardware stability or speed certification. See `docs/VALIDATION.md` and `THIRD_PARTY_NOTICES.md` before distributing linked firmware.
+如需直接下载编译好的固件刷机，请前往 GitHub 仓库的 **Releases** 页面下载。两块开发板必须刷入同一版本的 `.uf2` 固件。

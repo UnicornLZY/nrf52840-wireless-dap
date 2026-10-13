@@ -1,9 +1,10 @@
 # Contributing
 
-Please open an issue describing the problem or proposed change. Include the board/target model, firmware hash, wiring and power arrangement, host tool versions, complete errors, and reproducible steps. Do not attach passwords, tokens or full-flash snapshots from unrelated projects.
+欢迎提交 Issue 或 Pull Request 参与改进本项目！
 
-Keep changes focused. Run `run_tests.ps1` and `build.ps1`, and describe what was tested on real hardware separately from the desktop model results. Wireless retransmission must not duplicate target DAP execution; UART changes must retain order, duplicate suppression and backpressure behavior.
-
-Protocol-incompatible changes need a distinct version and require both peers to update. Do not import failed historical worker-priority, larger-window or automatic target-write replay experiments without new evidence.
-
-Project-authored contributions use MIT; preserve all third-party notices. Update docs, validation status and the source manifest when changing the production snapshot. A public candidate is not automatically a hardware-validated stable release.
+1. **反馈问题 (Issues)**：
+   提交 Issue 时请尽量附上开发板与目标 MCU 型号、接线与供电方式、Keil/上位机版本以及具体的报错信息或复现步骤。
+2. **提交代码 (Pull Requests)**：
+   - 修改代码后请运行 `.\run_tests.ps1` 和 `.\build.ps1`，确保桌面回归测试与固件编译通过。
+   - 若修改了无线通信协议格式，请确保收发两端兼容或同步更新协议版本号。
+   - 请保持第三方开源组件（如 `libraries/WirelessDAP/src/arm/`）原有的版权声明与许可证头信息。
