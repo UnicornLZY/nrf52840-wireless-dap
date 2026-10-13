@@ -1,0 +1,135 @@
+{
+  "schema_version": 1,
+  "snapshot": "uart-latency-dap128-4mhz-2mbps-channel40",
+  "date": "2026-10-07",
+  "reference_firmware": {
+    "name": "uart_latency_packet128_unified_v3_p113_2m_fast_ch40.uf2",
+    "sha256": "7e3c4c9daccf2e4ee8f4f7374d04b86c9dc7b918fe94259589ed8ac29d928147",
+    "bytes": 181760,
+    "rebuilt_exact_match": true
+  },
+  "upstream_cmsis_dap_commit": "12636590eec66fae2d1bba4518749426ad5a4595",
+  "hardware_validation": "not_completed_for_this_snapshot",
+  "production_sources": [
+    {
+      "path": "libraries/WirelessDAP/library.properties",
+      "sha256": "f759e94714263f6ff22ad1c1c6db4d189547591e7b9df6d9ad40645836854b87"
+    },
+    {
+      "path": "libraries/WirelessDAP/src/arm/DAP.c",
+      "sha256": "ab215e5243eb5d070b3beec4feb10617c960eccb7cce57861979ee42a6912b09"
+    },
+    {
+      "path": "libraries/WirelessDAP/src/arm/DAP.h",
+      "sha256": "39ae7e61bf2015f6f2b07fdac4d8ce96ef880d112277aa4148d45f780ad5c4c1"
+    },
+    {
+      "path": "libraries/WirelessDAP/src/arm/DAP_vendor.c",
+      "sha256": "c9259fe5417c949fa346b0fedbb318fa0007a2fc7c8b7b10dea938e4165d9407"
+    },
+    {
+      "path": "libraries/WirelessDAP/src/arm/SW_DP.c",
+      "sha256": "3a4823e96338a5ee1fc74cadfbf50b10cb10b232d0853b26a1769d979f22a29e"
+    },
+    {
+      "path": "libraries/WirelessDAP/src/BoardIdentity.h",
+      "sha256": "a24029f706a651a531fb20074a2c3bc7fb9df1040ee7088fd7d96a65a56103db"
+    },
+    {
+      "path": "libraries/WirelessDAP/src/DAP_config.h",
+      "sha256": "214557d032ec3549ed24389751f0616d4206d0f3d90c576bcd3fbe8ad9148256"
+    },
+    {
+      "path": "libraries/WirelessDAP/src/DapGuard.h",
+      "sha256": "860dfe6b161ea58ce5c79a85839112ddb8f78c36e9069401b93f509cf8ed8b21"
+    },
+    {
+      "path": "libraries/WirelessDAP/src/DapRunKick.h",
+      "sha256": "689ef42efb7c7b27677909f6ce8a491f3206439292d9c736f575a1e43793361f"
+    },
+    {
+      "path": "libraries/WirelessDAP/src/DapTiming.h",
+      "sha256": "ac3768a3d5a5634ae93886c18a9b14357f2e3ca5b4fccd93920a1d947f955d4d"
+    },
+    {
+      "path": "libraries/WirelessDAP/src/DapWireLength.h",
+      "sha256": "85a7e210455329610d0e5e9c79d135707b0178cea46e1d5095f57c00a87070e7"
+    },
+    {
+      "path": "libraries/WirelessDAP/src/EsbPacket.h",
+      "sha256": "fc5d3b26fd843faa0808b592dd3bf5791900a42666a0103d8561465500da66ce"
+    },
+    {
+      "path": "libraries/WirelessDAP/src/EsbTransport.cpp",
+      "sha256": "e813060896d3f662aaed8289bc4ac736ac3d8a0ac148aa008f304df60bcb814a"
+    },
+    {
+      "path": "libraries/WirelessDAP/src/EsbTransport.h",
+      "sha256": "80b8a796f3ff6cdaad412cc4a4b2b308b735b031a4d1abb52995e4c86ac440d0"
+    },
+    {
+      "path": "libraries/WirelessDAP/src/PacketStats.h",
+      "sha256": "97529daaee7defbc9611eced01a26918d5893d866e6b6c0c7deebc9aeaa7f9d2"
+    },
+    {
+      "path": "libraries/WirelessDAP/src/Protocol.h",
+      "sha256": "9690849e8abfc5fa4bbcdba58ffd22a047deee598a513fbe2de4dfa6b09ab556"
+    },
+    {
+      "path": "libraries/WirelessDAP/src/RadioPolicy.h",
+      "sha256": "b281813f6aa3a5e9fc7a079acbe227cc5c12faa5798f54e6f19b24e841922072"
+    },
+    {
+      "path": "libraries/WirelessDAP/src/ResetRun.h",
+      "sha256": "fb19c41be88ee37bc8e0dd20b2179cb269c8d54c52aa410eab421c0997084286"
+    },
+    {
+      "path": "libraries/WirelessDAP/src/SessionRecovery.h",
+      "sha256": "203c1c02820559ba7393696d0879975ac7ab74a04dbd82f3625203744f5c9408"
+    },
+    {
+      "path": "libraries/WirelessDAP/src/SoftReset.h",
+      "sha256": "9325c215b15d976e633fd6e19c0f7010d7fbde0076cd242aeae691e475c24e75"
+    },
+    {
+      "path": "libraries/WirelessDAP/src/SwdClockPolicy.h",
+      "sha256": "5c7e8517c8631f3622159e40dd592f771983b08e3ccbdada4eddf0ad329a5355"
+    },
+    {
+      "path": "libraries/WirelessDAP/src/UartSettings.h",
+      "sha256": "895ac7ddb922daa14a6997999549d41acc40e6608606761491e41c6531726a7e"
+    },
+    {
+      "path": "libraries/WirelessDAP/src/UsbDapAssembler.h",
+      "sha256": "555dd72a1ec6a67adc76a80dbb91f662affccfd52863f15a7b7cef9ef043d12a"
+    },
+    {
+      "path": "libraries/WirelessDAP/src/UsbDapResponse.h",
+      "sha256": "ba9032028eb6af5c55d475e74b70ef937e3684c3b1e0c95a0add3fc5efbe4f0d"
+    },
+    {
+      "path": "libraries/WirelessDAP/src/UsbDapTxState.h",
+      "sha256": "de41c7e08b85c4a418fb3af5c55fa22ada0f5dcba22fa1ec17b52793d9cc086e"
+    },
+    {
+      "path": "libraries/WirelessDAP/src/WirelessDAP.cpp",
+      "sha256": "24fcb2c137a1b5f97cd5835f11136a4f186dab42c442911958270097f6e6ea89"
+    },
+    {
+      "path": "libraries/WirelessDAP/src/WirelessDAP.h",
+      "sha256": "012430529e7f3a75b767a9598032b30459b297069d7a8468b201dec951576e19"
+    },
+    {
+      "path": "variant/variant.cpp",
+      "sha256": "b82e89560dc69d2ab55069879042ec5ee5738ef4d160e43107006e47eb43efeb"
+    },
+    {
+      "path": "variant/variant.h",
+      "sha256": "26a3aabf438bdc99313436c5323c73bd3a5da9287066cc0632d715f6dee422d0"
+    },
+    {
+      "path": "unified_dap/unified_dap.ino",
+      "sha256": "6a6c27d8275657cde184105ad1ebceeac85608ac8b11c713cd44248a6387ed6a"
+    }
+  ]
+}

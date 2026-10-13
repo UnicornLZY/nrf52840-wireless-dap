@@ -1,0 +1,8 @@
+* text=auto
+*.md text eol=lf
+*.cpp text eol=lf
+*.c text eol=lf
+*.h text eol=lf
+*.py text eol=lf
+*.ps1 text eol=lf
+*.uf2 binary

@@ -1,0 +1,15 @@
+/build/
+/test-build/
+/firmware/*.uf2
+*.exe
+*.elf
+*.hex
+*.bin
+*.o
+*.a
+*.map
+__pycache__/
+.DS_Store
+Thumbs.db
+.env
+.env.*
