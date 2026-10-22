@@ -16,9 +16,27 @@ struct MockUsbDevice{
 };
 extern MockUsbDevice TinyUSBDevice;
 struct Adafruit_USBD_WebUSB{void setStringDescriptor(const char*){} void begin(){}};
+class Adafruit_USBD_MSC {
+public:
+  typedef int32_t (*read_callback_t)(uint32_t lba, void *buffer, uint32_t bufsize);
+  typedef int32_t (*write_callback_t)(uint32_t lba, uint8_t *buffer, uint32_t bufsize);
+  typedef void (*flush_callback_t)(void);
+  void setID(const char*, const char*, const char*){}
+  void setCapacity(uint32_t, uint16_t){}
+  void setReadWriteCallback(read_callback_t rd, write_callback_t wr, flush_callback_t fl){
+    rd_=rd; wr_=wr; fl_=fl;
+  }
+  void setUnitReady(bool){}
+  bool begin(){return true;}
+  read_callback_t rd_=nullptr;
+  write_callback_t wr_=nullptr;
+  flush_callback_t fl_=nullptr;
+};
 inline void tud_vendor_read_flush(){}
 inline bool tud_vendor_mounted(){return mockMounted;}
-#if WD_DAP128
+#if WD_DAP240
+inline unsigned tud_vendor_write_available(){return 512;}
+#elif WD_DAP128
 inline unsigned tud_vendor_write_available(){return 256;}
 #else
 inline unsigned tud_vendor_write_available(){return 64;}

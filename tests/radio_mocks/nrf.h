@@ -15,6 +15,7 @@ inline void NVIC_DisableIRQ(int){}
 inline void NVIC_EnableIRQ(int){}
 inline void NVIC_ClearPendingIRQ(int){}
 inline void NVIC_SetPriority(int,int){}
+inline void NVIC_SystemReset(){}
 #define CLOCK_HFCLKSTAT_STATE_Msk 2
 #define CLOCK_HFCLKSTAT_SRC_Msk 1
 #define RADIO_MODE_MODE_Nrf_1Mbit 0

@@ -1,40 +1,76 @@
-# 构建说明
+# 构建与编译说明
 
-本项目使用 Arduino CLI 与 Adafruit nRF52 Core **1.7.0** 进行编译，源码仓库已内置所需的 ARM CMSIS-DAP 协议层文件与板级 `variant` 引脚映射，可开箱即用。
+本项目使用 Arduino CLI 与 Adafruit nRF52 Core **1.7.0** 进行固件构建，源码仓库已内置所需的 ARM CMSIS-DAP 协议层文件与板级 `variant` 引脚映射，可开箱即用。
+
+---
 
 ## 一、环境准备
 
-- **Windows PowerShell**
-- **Arduino CLI**（建议使用 `1.5.x` 及以上版本）
-- **Adafruit nRF52 Core `1.7.0`**（包含 ARM GCC 工具链、S140 头文件、TinyUSB、FreeRTOS 及 Nordic SDK）
-- **Python 3**（用于调用 `uf2conv.py` 生成 UF2 镜像及运行 `tools/verify_uf2.py` 校验）
-- **g++ 编译器**（可选，如 MinGW-w64，用于编译运行 `tests/` 下的桌面回归测试）
+1. **操作系统**：Windows 10 / 11 配合 PowerShell
+2. **Arduino CLI**：建议使用 `1.5.x` 及以上版本
+3. **Adafruit nRF52 Core `1.7.0`**：
+   包含 ARM GCC 交叉工具链、Nordic S140 协议栈头文件、TinyUSB 与 FreeRTOS 内核
+4. **Python 3**：用于调用 `uf2conv.py` 转换生成 `.uf2` 镜像及执行结构哈希校验
+5. **g++ (MinGW-w64)**（可选）：用于运行桌面自动化回归测试
 
-## 二、编译与测试命令
+---
 
-在仓库根目录下打开 PowerShell 执行：
+## 二、安装依赖核心与工具
+
+在 PowerShell 中执行以下命令安装 Adafruit nRF52 核心包：
 
 ```powershell
-# 1. 安装 Adafruit nRF52 Core 1.7.0
+# 1. 更新索引并安装 Adafruit nRF52 1.7.0 核心
 arduino-cli core update-index --additional-urls https://adafruit.github.io/arduino-board-index/package_adafruit_index.json
 arduino-cli core install adafruit:nrf52@1.7.0 --additional-urls https://adafruit.github.io/arduino-board-index/package_adafruit_index.json
+```
 
-# 2. 编译生成 UF2 固件
+---
+
+## 三、编译生产 UF2 固件
+
+在仓库根目录下执行构建脚本：
+
+```powershell
+# 编译默认 v4.3 稳定版（240B MTU / 2 Mbps / 信道 80 / AFH 智能跳频）
 .\build.ps1
+```
 
-# 3. 运行桌面回归测试（可选）
+构建脚本会自动完成：
+1. 查找并调用 `arduino-cli` 进行交叉编译
+2. 提取编译产物中的 `.hex` 文件
+3. 调用 `uf2conv.py` 将固件封装为适配 Adafruit / nice!nano Bootloader 的 `.uf2` 格式
+4. 输出至 `firmware/uart_latency_packet240_unified_v3_p113_2m_fast_ch80_afh_v2.uf2`
+5. 自动运行 `tools/verify_uf2.py` 执行 UF2 扇区边界及 SHA-256 结构自检
+
+### 自定义编译参数
+
+构建脚本支持灵活传参定制：
+```powershell
+# 示例：定制为 128 字节包、基准信道 40
+.\build.ps1 -PacketBytes 128 -Channel 40
+
+# 示例：显式指定外部工具路径
+.\build.ps1 -Cli 'C:\Tools\arduino-cli.exe' -Python 'C:\Python312\python.exe'
+```
+
+---
+
+## 四、运行桌面单元与协议回归测试
+
+在不需要连接物理硬件的情况下，可通过桌面模拟器测试核心协议栈、链路重传机制与虚拟文件系统：
+
+```powershell
 .\run_tests.ps1
 ```
 
-如果相关工具未加入系统 `PATH` 环境变量，可通过参数显式指定路径：
-
-```powershell
-.\build.ps1 -Cli 'C:\path\to\arduino-cli.exe' -Python 'C:\path\to\python.exe' -Core 'C:\path\to\nrf52\1.7.0'
-.\run_tests.ps1 -Cxx 'C:\path\to\g++.exe'
-```
-
-## 三、编译配置说明
-
-- **目标 FQBN**：`adafruit:nrf52:pca10056:softdevice=s140v6,debug=l0`，通过本地 `variant/` 目录覆盖引脚定义（代码中使用 nRF52840 原生 GPIO 编号，而非开发板丝印 `Dx` 编号）。
-- **核心编译宏**：启用 2.4 GHz ESB 私有传输、128 字节 DAP 逻辑包、TinyUSB 兼容发送状态机、右侧 `P1.13` 复位引脚映射、紧凑无线请求、会话隔离与恢复、软件复位状态确认、2 Mbps 速率（频道 40）及 4 MHz SWD 时钟上限。完整宏定义见根目录 [`build.ps1`](../build.ps1)。
-- **构建产物**：编译成功后输出至 `firmware/uart_latency_packet128_unified_v3_p113_2m_fast_ch40.uf2`（应用起始地址 `0x26000`，需配合板载 S140 6.1.1 与 UF2 Bootloader 使用）。
+测试脚本将自动调用 `g++` 编译并运行以下 9 项测试用例：
+1. **`free_role_test`**：双机无状态自由角色协商与有线插入平滑接管测试
+2. **`packet128_test`**：大包传输窗口与并发吞吐模型测试
+3. **`recovery_test`**：空口单向/双向丢包超时重试、会话自愈及 USB 管道冲刷测试
+4. **`uart_latency_test`**：1ms 短帧自适应合包与全双工回显延时测试
+5. **`uart_timing_probe`**：高波特率串口发送精度与抗抖动测试
+6. **`config_disk_test`**：1MB 虚拟 U 盘 FAT12 文件系统一致性、`DAPLINK.exe` 逐字节校验与 Flash 模拟持久化测试
+7. **`afh_test`**：AFH 智能自适应跳频全信道伪随机正交分布算法数学验证
+8. **`usb_compat_test`**：WinUSB Bulk 零长包 (ZLP) 状态机与即时完成序列化测试
+9. **`radio_test`**：Nordic 2.4G ESB 物理层 1000 轮随机全双工双向交互与抗误码压力测试

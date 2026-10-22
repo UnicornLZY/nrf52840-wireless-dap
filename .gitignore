@@ -1,13 +1,17 @@
 /build/
 /test-build/
 /firmware/*.uf2
+!firmware/uart_latency_packet240_unified_v3_p113_2m_fast_ch80_afh_v2.uf2
 *.exe
+!tools/DAPLINK.exe
 *.elf
 *.hex
 *.bin
 *.o
 *.a
 *.map
+*.d
+*.libsdetect.d
 __pycache__/
 .DS_Store
 Thumbs.db

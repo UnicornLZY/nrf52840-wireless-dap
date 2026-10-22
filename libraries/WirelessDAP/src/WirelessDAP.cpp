@@ -36,11 +36,12 @@
 #if WD_PROFILE
 #include "DapTiming.h"
 #endif
-#if WD_DAP128
+#if (WD_DAP128 || WD_DAP240)
 #include "UsbDapAssembler.h"
 #endif
 #include "UartSettings.h"
 #include "SessionRecovery.h"
+#include "ConfigDisk.h"
 // Adafruit WebUSB supplies the WinUSB compatible descriptor. Replace its
 // generic WebUSB interface GUID with Arm's standardized CMSIS-DAP v2 GUID so
 // debuggers (including Keil) enumerate the interface.
@@ -133,6 +134,8 @@ static uint8_t txWire[WireMax*3];
 static size_t txLength=0,txOffset=0;
 static uint32_t txProgress=0;
 static uint32_t lastUartTransmit=0;
+static volatile uint32_t lastDapActivityAt=0;
+static volatile uint32_t lastBurnActivityAt=0;
 static Frame incoming;
 static uint32_t invalidFrames=0;
 static constexpr uint32_t LocalUsbSession=0xffffffffUL;
@@ -140,7 +143,7 @@ static Adafruit_USBD_WebUSB dapUsb;
 static QueueHandle_t usbRequests;
 struct UsbPacket {uint8_t data[DapPacketSize];};
 static UsbPacket usbPackets[UsbPacketCount];
-#if WD_DAP128
+#if (WD_DAP128 || WD_DAP240)
 static UsbDapAssembler usbAssembler;
 #endif
 static volatile uint8_t usbPacketHead=0,usbPacketTail=0;
@@ -184,13 +187,14 @@ extern "C" void __wrap_tud_cdc_line_state_cb(uint8_t,bool,bool) {}
 // Preserve every completed USB Bulk OUT transfer. Short CMSIS-DAP commands
 // are zero-padded for the fixed 64-byte command parser.
 extern "C" void tud_vendor_rx_cb(uint8_t,const uint8_t* buffer,uint16_t size) {
-#if WD_DAP128
+  lastDapActivityAt=millis();
+#if (WD_DAP128 || WD_DAP240)
   if(size>64){usbOverflow=true;usbRingOverflowCount++;tud_vendor_read_flush();usbAssembler.reset();return;}
-  uint8_t assembled[128];
+  uint8_t assembled[DapPacketSize];
   if(!usbAssembler.feed(buffer,size,assembled)){tud_vendor_read_flush();return;}
   uint8_t head=usbPacketHead,next=(head+1)&(UsbPacketCount-1);
   if(next==usbPacketTail){usbOverflow=true;usbRingOverflowCount++;tud_vendor_read_flush();return;}
-  memcpy(usbPackets[head].data,assembled,128);
+  memcpy(usbPackets[head].data,assembled,DapPacketSize);
   usbPacketHead=next;tud_vendor_read_flush();
 #else
   if(!size)return;
@@ -284,11 +288,39 @@ static bool hostUsbRemountGrace=false;
 static bool hostRecoveryEpisode=false;
 static bool hostUsbRecoveryPending=false;
 static uint32_t hostUsbRecoveryIdleAt=0;
+static uint32_t hostUsbRecoveryStartedAt=0;
 #endif
 static bool localLeaseForDap=false;
 static uint32_t lastLocalDapAt=0;
 static volatile uint32_t dapEpoch=0;
 static volatile bool overflow=false;
+// activity tracked at top
+inline bool isDapActive() {
+  return (dapCount > 0 || dapRunning || uint32_t(millis() - lastDapActivityAt) < 25);
+}
+#ifdef NRF_CLOCK
+inline void ensureHfxoRunning(){
+  const uint32_t mask = CLOCK_HFCLKSTAT_STATE_Running | CLOCK_HFCLKSTAT_SRC_Xtal;
+  if((NRF_CLOCK->HFCLKSTAT & mask) != mask){
+    NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
+    NRF_CLOCK->TASKS_HFCLKSTART = 1;
+    while((NRF_CLOCK->HFCLKSTAT & mask) != mask);
+  }
+}
+#endif
+
+
+enum DisconnectReason : uint8_t {
+  DISC_NONE = 0,
+  DISC_DAP_TIMEOUT = 1,
+  DISC_PEER_TIMEOUT = 2,
+  DISC_TX_QUEUE_FULL = 3,
+  DISC_USB_OVERFLOW = 4,
+  DISC_SESSION_RESET = 5,
+  DISC_INVALID_FRAME = 6,
+  DISC_HARD_RECOVERY = 7
+};
+static uint8_t lastDisconnectReason = DISC_NONE;
 
 // Read-only vendor status for diagnosing role and link recovery. It never
 // touches the target SWD pins or changes a session.
@@ -307,23 +339,25 @@ static void writeUnifiedStatus(uint8_t* r){
   const auto& rf=transport.stats();
   write32(r+28,rf.tx);write32(r+32,rf.retries);write32(r+36,rf.received);
   write32(r+40,rf.crcErrors);write32(r+44,rf.timeouts);write32(r+48,rf.backpressure);
-  write32(r+52,rf.clockRestarts);r[56]=rf.rssi;r[57]=WD_RADIO_MBPS;r[58]=WD_RADIO_CHANNEL;
+  write32(r+52,rf.clockRestarts);r[56]=rf.rssi;r[57]=WD_RADIO_MBPS;r[58]=WD_RADIO_CHANNEL;r[59]=lastDisconnectReason;
   write32(r+60,transport.bootId());
 }
 
 #if WD_ESB
 static bool connected(){return transport.connected();}
-static void disconnectLink(){
+static void disconnectLink(uint8_t reason = 0){
+  if(reason) lastDisconnectReason = reason;
 #if WD_SESSION_RESTART_TEST
   if(hostMode && !localMode && dapCount && wirelessHostSeen){
     hostUsbRecoveryPending=true;hostUsbRecoveryIdleAt=millis();
+    hostUsbRecoveryStartedAt=millis();
   }
 #endif
   transport.reset();ready=false;generation++;
 }
 #else
 static bool connected() {return conn!=BLE_CONN_HANDLE_INVALID && Bluefruit.connected(conn);}
-static void disconnectLink() {if(connected()) Bluefruit.disconnect(conn);ready=false;}
+static void disconnectLink(uint8_t reason = 0) {if(reason) lastDisconnectReason=reason;if(connected()) Bluefruit.disconnect(conn);ready=false;}
 #endif
 #if WD_SESSION_RESTART_TEST
 static void requestHostRestart(){
@@ -335,7 +369,7 @@ static bool queueFrame(uint8_t type,uint16_t seq,const uint8_t* data=nullptr,siz
   if(n>PayloadMax) return false;
   Frame f={};f.type=type;f.session=session;f.seq=seq;f.len=n;
   if(n) memcpy(f.data,data,n);
-  if(xQueueSend(txQueue,&f,0)!=pdTRUE) {disconnectLink();return false;}
+  if(xQueueSend(txQueue,&f,0)!=pdTRUE) {disconnectLink(DISC_TX_QUEUE_FULL);return false;}
   return true;
 }
 #if !WD_ESB
@@ -355,8 +389,8 @@ static void onConnect(uint16_t h) {
 static uint8_t localInfo(const uint8_t* q,uint8_t* r) {
   memset(r,0,DapPacketSize); const char* text=nullptr;
   switch(q[1]) {
-    case 1:text="SuperMini DIY";break;
-    case 2:text=WD_ESB?"Wireless ESB CMSIS-DAP":"Wireless CMSIS-DAP";break;
+    case 1:text="ARM";break;
+    case 2:text="CMSIS-DAP v2";break;
     case 3:text=serialNumber;break;
     case 4:text="2.1.0";break;
     case 9:text=WD_ESB?"3.1.0-PACKET":"0.6.0";break;
@@ -365,7 +399,7 @@ static uint8_t localInfo(const uint8_t* q,uint8_t* r) {
     // single outstanding DAP packet locally to keep the target algorithm and
     // SWD worker synchronized; wireless retains the normal four-packet window.
     case 0xfe:r[1]=1;r[2]=(WD_WIRED_SERIAL_TEST && localMode)?1:DapWindow;break;
-    case 0xff:r[1]=2;r[2]=DapPacketSize;break;
+    case 0xff:r[1]=2;r[2]=(uint8_t)(DapPacketSize & 0xFF);r[3]=(uint8_t)(DapPacketSize >> 8);break;
   }
   if(text){r[1]=strlen(text)+1;memcpy(r+2,text,r[1]);}
   return uint8_t(2+r[1]);
@@ -420,6 +454,10 @@ static void dapWorker(void*) {
     if(epoch!=dapEpoch)continue;
     if(local!=localMode)continue;
     if(!local && (!ready || job.session!=session))continue;
+    lastDapActivityAt=millis();
+    if(job.data[0]==0x05 || job.data[0]==0x06 || job.data[0]==0x12 || job.data[0]==0x11 || job.data[0]==0x04 || job.data[0]==0x02 || job.data[0]==0x0a){
+      lastBurnActivityAt=millis();
+    }
     if(initializedSession!=job.session || initializedEpoch!=epoch){
       resetRun.clear();DAP_Setup();initializedSession=job.session;initializedEpoch=epoch;
       DAP_Data.debug_port=DAP_PORT_SWD;
@@ -525,8 +563,13 @@ static void dapWorker(void*) {
 #endif
       // A's existing local USB identity remains a 64-byte CMSIS-DAP probe.
       // Keil may cache that size by VID/PID/serial. Only B advertises 128.
-#if WD_DAP128
-      if(local && job.data[0]==0 && job.data[1]==0xff)result.data[2]=DapPacketSize;
+#if (WD_DAP128 || WD_DAP240)
+      if(local && job.data[0]==0 && job.data[1]==0xff) {
+        result.data[1]=2;
+        result.data[2]=(uint8_t)(DapPacketSize & 0xFF);
+        result.data[3]=(uint8_t)(DapPacketSize >> 8);
+        result.len=4;
+      }
 #endif
       if(job.data[0]==0 && job.data[1]==0xf0)result.data[2]&=~0x10;
     }
@@ -560,11 +603,17 @@ static void dapWorker(void*) {
 static void handleFrame(const Frame& f) {
   if(f.type==Hello){
 if(!hostMode){
+    if(f.len >= 5) {
+      if(read32(f.data+1) != configDisk.config().pairCode) return;
+    }
     if(!validHello(f))return;
     if(!ready || f.session!=session){
       resetLinkState();session=f.session;ready=true;
     }
-    lastPeer=millis();uint8_t ver=LinkVersion;queueFrame(HelloAck,0,&ver,1);
+    lastPeer=millis();
+    uint8_t ackPayload[5]={LinkVersion};
+    write32(ackPayload+1, configDisk.config().pairCode);
+    queueFrame(HelloAck,0,ackPayload,5);
 }
     return;
   }
@@ -582,7 +631,10 @@ if(hostMode){
 }
   if(f.session!=session)return;
 if(hostMode){
-  if(f.type==HelloAck && f.len==1 && f.data[0]==LinkVersion){
+  if(f.type==HelloAck && (f.len==1 || f.len>=5) && f.data[0]==LinkVersion){
+    if(f.len >= 5) {
+      if(read32(f.data+1) != configDisk.config().pairCode) return;
+    }
     ready=true;lastPeer=millis();
 #if WD_LINK_RECOVERY_TEST
     wirelessHostSeen=true;
@@ -647,6 +699,9 @@ if(hostMode){
           if(s.remote && !s.ready && s.seq==f.seq){
             if(!validDapResponse(s.request,f.data,f.len)){invalidFrames++;disconnectLink();return;}
             memset(s.response,0,DapPacketSize);memcpy(s.response,f.data,f.len);s.responseLen=(uint8_t)f.len;s.ready=true;
+            if(s.request[0]==0x05 || s.request[0]==0x06 || s.request[0]==0x12 || s.request[0]==0x11 || s.request[0]==0x04 || s.request[0]==0x02 || s.request[0]==0x0a){
+              lastBurnActivityAt=millis();
+            }
             if(s.request[0]==2)debugConnected=s.response[1]==1;
             if(s.request[0]==3)debugConnected=false;
             break;
@@ -656,6 +711,9 @@ if(hostMode){
       break;
     case DapRequest:
       if(hostMode)break;
+      if(f.data[0]==0x05 || f.data[0]==0x06 || f.data[0]==0x12 || f.data[0]==0x11 || f.data[0]==0x04 || f.data[0]==0x02 || f.data[0]==0x0a){
+        lastBurnActivityAt=millis();
+      }
 #if WD_COMPACT_WIRE_TEST
       if(f.len==0 || f.len>DapPacketSize || !f.seq){disconnectLink();break;}
 #else
@@ -726,9 +784,14 @@ static void pumpTransmit() {
       UartSlot& s=uartPending[(uartHead+i)%4];
       if(!s.acked && (!s.sent || uint32_t(millis()-s.sentAt)>=s.retryMs)){uartNext=&s;break;}
     }
-    // Reserve regular airtime for serial data even while DAP is continuously
-    // queued. This fixes CDC appearing dead during a long flash operation.
-    bool serveUart=uartNext && uint32_t(millis()-lastUartTransmit)>=8;
+    // CDC After DAP (Industry Benchmark from ylj2000):
+    // During active DAP programming, give 100% of the half-duplex RF airtime to DAP.
+    // Yield to UART only when DAP pipeline is completely idle.
+    bool dapBusy = isDapActive();
+    bool serveUart = false;
+    if (!dapBusy) {
+      serveUart = uartNext && (uint32_t(millis()-lastUartTransmit) >= 2 || uxQueueMessagesWaiting(txQueue) == 0);
+    }
     if(serveUart){
       f=uartNext->frame;markUartSent(*uartNext,millis());lastUartTransmit=millis();
     } else if(xQueueReceive(txQueue,&f,0)!=pdTRUE) {
@@ -792,11 +855,13 @@ if(hostMode && !localMode){
 } else {
   if(localMode){
     while(tud_cdc_n_available(0) && uartToLocal.free()){
-      uint8_t b;if(tud_cdc_n_read(0,&b,1)!=1)break;uartToLocal.push(b);
+      uint8_t b;if(tud_cdc_n_read(0,&b,1)!=1)break;
+uartToLocal.push(b);
     }
     if(!tud_cdc_n_ready(0))uartToPeer.clear();
     while(Serial2.available() && (!tud_cdc_n_ready(0) || uartToPeer.free())){
-      uint8_t b=Serial2.read();if(tud_cdc_n_ready(0))uartToPeer.push(b);
+      uint8_t b=Serial2.read();
+if(tud_cdc_n_ready(0))uartToPeer.push(b);
     }
     size_t room=tud_cdc_n_ready(0)?tud_cdc_n_write_available(0):0;
     while(room-- && uartToPeer.size()){
@@ -805,7 +870,8 @@ if(hostMode && !localMode){
     tud_cdc_n_write_flush(0);
   } else {
   while(Serial2.available() && (!ready || uartToPeer.free())){
-    uint8_t b=Serial2.read();if(ready)uartToPeer.push(b);
+    uint8_t b=Serial2.read();
+if(ready)uartToPeer.push(b);
   }
   }
 }
@@ -869,6 +935,12 @@ void wirelessSetup() {
   roleProbeStarted=roleProbeUsbWasPresent=roleProbeApply=false;
   preferredRole=boardPreference(NRF_FICR->DEVICEID[0],NRF_FICR->DEVICEID[1]);
   targetPeerSeen=preferredRole==TargetRole;
+  configDisk.init();
+  transport.setPairCode(configDisk.config().pairCode);
+  transport.setChannel(configDisk.config().channel);
+  transport.setTxPower(configDisk.config().txPower);
+  if(configDisk.config().role == 1) hostMode = true;
+  else if(configDisk.config().role == 2) hostMode = false;
   usbEverMounted=false;
   lastUsbMountedAt=0;
   localMode=false;
@@ -890,18 +962,20 @@ void wirelessSetup() {
   usbRequests=xQueueCreate(UsbRequestQueueDepth,DapPacketSize);
   snprintf(serialNumber,sizeof(serialNumber),"%08lX%08lX",(unsigned long)NRF_FICR->DEVICEID[1],(unsigned long)NRF_FICR->DEVICEID[0]);
   TinyUSBDevice.detach();
-  // A's earlier 80DE WinUSB instance was cached without the CMSIS-DAP
-  // DeviceInterfaceGUIDs property. Use a fresh identity for this revision.
+  // Standard revision PID 0x80E2
   TinyUSBDevice.setID(0x239A,0x80E2);
-  TinyUSBDevice.setProductDescriptor("SuperMini Auto Role CMSIS-DAP v2");
+  const char* prodName = (configDisk.config().protocol == 1) ? "CMSIS-DAP" : "CMSIS-DAP v2";
+  TinyUSBDevice.setProductDescriptor(prodName);
   TinyUSBDevice.setSerialDescriptor(serialNumber);
   static const char cmsisDapGuid[]="{CDB3B5AD-293B-4663-AA36-1AAE46463776}";
   for(size_t i=0;i<sizeof(cmsisDapGuid);i++){
     desc_ms_os_20[98+i*2]=(uint8_t)cmsisDapGuid[i];
     desc_ms_os_20[99+i*2]=0;
   }
-  dapUsb.setStringDescriptor("CMSIS-DAP v2");dapUsb.begin();
-  delay(10);TinyUSBDevice.attach();
+  dapUsb.setStringDescriptor(prodName);dapUsb.begin();
+
+  configDisk.begin();
+  delay(50);TinyUSBDevice.attach();
   dapJobs=xQueueCreate(DapWindow,sizeof(Frame));dapResults=xQueueCreate(DapWindow,sizeof(Frame));
   xTaskCreate(dapWorker,"SWD",1024,nullptr,TASK_PRIO_LOW,nullptr);
 if(hostMode){
@@ -937,7 +1011,7 @@ if(hostMode){
 void wirelessLoop() {
 #if WD_USB_COMPAT
   if(!TinyUSBDevice.mounted()){usbDapTx.clear();
-#if WD_DAP128
+#if (WD_DAP128 || WD_DAP240)
     usbAssembler.reset();
 #endif
   }
@@ -992,15 +1066,24 @@ void wirelessLoop() {
   if(hostUsbRecoveryPending){
     // Finish failed replies first. Re-enumerate only after the DAP pipeline
     // and USB IN are idle; never replay a failed command or reset the target.
-    if(dapCount || uxQueueMessagesWaiting(usbRequests) ||
-       usbPacketHead!=usbPacketTail || usbDapTx.isBusy())
-      hostUsbRecoveryIdleAt=millis();
-    if(hostMode && !localMode && !usbHidden && usbPresent && ready &&
-       TinyUSBDevice.mounted() && uint32_t(millis()-hostUsbRecoveryIdleAt)>=1000){
+    uint32_t nowMs = millis();
+    bool pipelineBusy = (dapCount || uxQueueMessagesWaiting(usbRequests) ||
+                         usbPacketHead!=usbPacketTail || usbDapTx.isBusy());
+    if(pipelineBusy) hostUsbRecoveryIdleAt=nowMs;
+
+    bool idleTrigger = (!pipelineBusy && ready && TinyUSBDevice.mounted() && uint32_t(nowMs - hostUsbRecoveryIdleAt)>=1000);
+    // Hard recovery timeout (Claude Point 4): force recovery detach after 2500ms if host stops reading USB IN
+    bool hardTimeoutTrigger = (uint32_t(nowMs - hostUsbRecoveryStartedAt)>=2500);
+
+    if(hostMode && !localMode && !usbHidden && usbPresent && (idleTrigger || hardTimeoutTrigger)){
+      if(hardTimeoutTrigger) lastDisconnectReason = DISC_HARD_RECOVERY;
       hostUsbRecoveryPending=false;hostUsbDetached=true;hostUsbRemountGrace=true;
-      hostRestartAt=millis();
+      hostRestartAt=nowMs;
       xQueueReset(usbRequests);usbPacketTail=usbPacketHead;
-      usbAssembler.reset();usbDapTx.clear();
+      #if (WD_DAP128 || WD_DAP240)
+      usbAssembler.reset();
+#endif
+      usbDapTx.clear();
       dapHead=dapCount=0;hostCancelledRequests=0;
       resetLinkState();hostCancelledRequests=0;
       TinyUSBDevice.detach();taskYIELD();return;
@@ -1062,7 +1145,7 @@ if(!hostMode){
     resetLinkState();
     seenGeneration=generation;wasConnected=false;
     xQueueReset(usbRequests);usbOverflow=false;
-#if WD_DAP128
+#if (WD_DAP128 || WD_DAP240)
     if(!localMode)usbAssembler.reset();
 #endif
     // Keep the first packets already received after enumeration; discard
@@ -1156,8 +1239,11 @@ if(!hostMode || localMode){
     // A full worker queue is ordinary backpressure, not a lost USB command.
     // Keep the request at the head until the worker accepts it.
     if(xQueueSend(dapJobs,&job,0)!=pdTRUE)break;
-    localUsbSeq=job.seq;
+    localUsbSeq=job.seq; lastDapActivityAt=millis();
     if(job.data[0]!=0x80)recordDap(0,job.data,DapPacketSize);
+    if(job.data[0]==0x05 || job.data[0]==0x06 || job.data[0]==0x12 || job.data[0]==0x11 || job.data[0]==0x04 || job.data[0]==0x02 || job.data[0]==0x0a){
+      lastBurnActivityAt=ms;
+    }
     if(localLeaseForDap)lastLocalDapAt=ms;
     xQueueReceive(usbRequests,localRaw,0);
   }
@@ -1177,7 +1263,12 @@ if(hostMode){
       }
     }
 #endif
-    if(!ready && ms-lastHello>=250){uint8_t ver=LinkVersion;queueFrame(Hello,0,&ver,1);lastHello=ms;}
+    if(!ready && ms-lastHello>=250){
+      uint8_t hData[5]={LinkVersion};
+      write32(hData+1,configDisk.config().pairCode);
+      queueFrame(Hello,0,hData,5);
+      lastHello=ms;
+    }
     if(ready && ms-lastPing>=300){queueFrame(Ping,0);lastPing=ms;}
 } else {
 #if !WD_ESB
@@ -1226,7 +1317,7 @@ if(hostMode && !localMode){
         DapSlot& s=dapSlots[(dapHead+i)%DapWindow];
         if(!s.ready){dapError(s.request[0],s.response);s.responseLen=dapErrorLength(s.request[0]);s.ready=true;}
       }
-      disconnectLink();
+      disconnectLink(DISC_DAP_TIMEOUT);
     }
     if(dapCount && dapSlots[dapHead].ready &&
        sendDapUsbPacket(dapEndpoint,dapSlots[dapHead].response,dapSlots[dapHead].responseLen)){
@@ -1255,7 +1346,10 @@ if(hostMode && !localMode){
       else if(cancelled || !ready || !validDap(raw)){dapError(raw[0],s.response);s.responseLen=dapErrorLength(s.request[0]);s.ready=true;}
       else {
         dapSeq=nextDapSequence(dapSeq);
-        s.seq=dapSeq;s.sentAt=ms;s.remote=true;
+        s.seq=dapSeq;s.sentAt=ms;s.remote=true; lastDapActivityAt=ms;
+        if(raw[0]==0x05 || raw[0]==0x06 || raw[0]==0x12 || raw[0]==0x11 || raw[0]==0x04 || raw[0]==0x02 || raw[0]==0x0a){
+          lastBurnActivityAt=ms;
+        }
         size_t requestLength=DapPacketSize;
 #if WD_COMPACT_WIRE_TEST
         requestLength=dapWireRequestLength(raw,DapPacketSize);
@@ -1306,7 +1400,42 @@ if(hostMode){
   if(!localMode)pumpTransmit();
   indicatedReady=localMode || ready;
 }
-  digitalWrite(15,indicatedReady?HIGH:((ms%1000)<120?HIGH:LOW));
+  bool isBurning = (lastBurnActivityAt != 0) && (uint32_t(ms - lastBurnActivityAt) < 200);
+  if(!indicatedReady){
+    // 未连接：慢闪（1秒闪一次，120ms 亮脉冲）
+    digitalWrite(15, ((ms % 1000) < 120) ? HIGH : LOW);
+  } else if(isBurning){
+    // Keil 正在烧录下载：快速爆闪（10Hz 爆闪，50ms 亮 / 50ms 灭）
+    digitalWrite(15, ((ms / 50) % 2 == 0) ? HIGH : LOW);
+  } else {
+    // 无线已连接待机：常亮
+    digitalWrite(15, HIGH);
+  }
+  static uint32_t lastTelemetryAt = 0;
+  if(uint32_t(ms) - lastTelemetryAt >= 250) {
+    lastTelemetryAt = uint32_t(ms);
+    int rssiVal = (int)transport.stats().rssi;
+    configDisk.setTelemetry(
+      rssiVal ? (rssiVal > 0 ? -rssiVal : rssiVal) : 0,
+      transport.stats().tx,
+      transport.stats().retries,
+      transport.stats().received,
+      transport.stats().crcErrors,
+      hostMode, localMode, ready,
+      DapPacketSize,
+      transport.hopCount(),
+      transport.hopChannels()
+    );
+  }
+  if(configDisk.isFlashPending()){
+    configDisk.commitToFlash();
+  }
+  if(configDisk.isRebootPending() && uint32_t(ms)>=configDisk.rebootAt()){
+    configDisk.clearReboot();
+#if !defined(HOST_TEST)
+    NVIC_SystemReset();
+#endif
+  }
   taskYIELD();
 }
 

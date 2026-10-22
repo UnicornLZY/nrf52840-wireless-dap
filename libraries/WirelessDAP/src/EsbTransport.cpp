@@ -38,18 +38,32 @@ void EsbTransport::configure(){
   NRF_CLOCK->EVENTS_HFCLKSTARTED=0;NRF_CLOCK->TASKS_HFCLKSTART=1;
   uint32_t start=radioNow();
   const uint32_t mask=CLOCK_HFCLKSTAT_SRC_Msk|CLOCK_HFCLKSTAT_STATE_Msk;
-  while((NRF_CLOCK->HFCLKSTAT&mask)!=mask && radioElapsed(radioNow(),start)<10000){}
+  while((NRF_CLOCK->HFCLKSTAT&mask)!=mask && radioElapsed(radioNow(),start)<50000){}
   NRF_RADIO->POWER=1;
   NRF_RADIO->MODE=WD_RADIO_MBPS==1?RADIO_MODE_MODE_Nrf_1Mbit:RADIO_MODE_MODE_Nrf_2Mbit;
-  NRF_RADIO->TXPOWER=RADIO_TXPOWER_TXPOWER_Pos8dBm;
-  NRF_RADIO->FREQUENCY=WD_RADIO_CHANNEL;
+  uint32_t pwrReg = RADIO_TXPOWER_TXPOWER_Pos8dBm;
+#ifdef RADIO_TXPOWER_TXPOWER_Pos4dBm
+  if (txPower_ <= -20) pwrReg = RADIO_TXPOWER_TXPOWER_Neg20dBm;
+  else if (txPower_ <= -16) pwrReg = RADIO_TXPOWER_TXPOWER_Neg16dBm;
+  else if (txPower_ <= -12) pwrReg = RADIO_TXPOWER_TXPOWER_Neg12dBm;
+  else if (txPower_ <= -8)  pwrReg = RADIO_TXPOWER_TXPOWER_Neg8dBm;
+  else if (txPower_ <= -4)  pwrReg = RADIO_TXPOWER_TXPOWER_Neg4dBm;
+  else if (txPower_ <= 0)   pwrReg = RADIO_TXPOWER_TXPOWER_0dBm;
+  else if (txPower_ <= 4)   pwrReg = RADIO_TXPOWER_TXPOWER_Pos4dBm;
+  else pwrReg = RADIO_TXPOWER_TXPOWER_Pos8dBm;
+#endif
+  NRF_RADIO->TXPOWER=pwrReg;
+  NRF_RADIO->FREQUENCY=channel_;
   NRF_RADIO->MODECNF0=RADIO_MODECNF0_RU_Fast;
   // Nordic 2 Mbit proprietary mode uses a 16-bit preamble (PS 6.20); 1 Mbit uses 8-bit.
   const uint32_t plen = (WD_RADIO_MBPS == 1) ? RADIO_PCNF0_PLEN_8bit : RADIO_PCNF0_PLEN_16bit;
   NRF_RADIO->PCNF0=(8UL<<RADIO_PCNF0_LFLEN_Pos)|(plen<<RADIO_PCNF0_PLEN_Pos);
   NRF_RADIO->PCNF1=(250UL<<RADIO_PCNF1_MAXLEN_Pos)|(4UL<<RADIO_PCNF1_BALEN_Pos);
   // Whitening is disabled for Nordic proprietary ESB mode.
-  NRF_RADIO->BASE0=0x7a6d5100UL;NRF_RADIO->PREFIX0=0xc3;
+  uint32_t base = 0x7a6d0000UL | (pairCode_ & 0xFFFFUL);
+  uint8_t prefix = 0xC3 ^ (uint8_t)((pairCode_ >> 16) & 0xFFUL) ^ (uint8_t)((pairCode_ >> 24) & 0xFFUL);
+  if (prefix == 0x00 || prefix == 0x55 || prefix == 0xAA) prefix ^= 0x3C;
+  NRF_RADIO->BASE0=base;NRF_RADIO->PREFIX0=prefix;
   NRF_RADIO->TXADDRESS=0;NRF_RADIO->RXADDRESSES=1;
   NRF_RADIO->CRCCNF=RADIO_CRCCNF_LEN_Two;
   NRF_RADIO->CRCINIT=0xffff;NRF_RADIO->CRCPOLY=0x11021;
@@ -103,6 +117,8 @@ void EsbTransport::setRole(bool host){
   suspend();host_=host;localOwner_=peerLocal_=false;
   pendingSeq_=0;pendingLength_=completedLength_=0;lastAckSize_=0;
   lastPeerSeq_=0;peerBoot_=0;lastRx_=lastPoll_=0;
+  currentHopIdx_=0;consecutiveRetries_=0;lastTargetHopAt_=millis();
+  channel_=hopChannels_[0];
   rx_.clear();tx_.clear();configure();if(!host_)receiveStart();
   // Preserve txSeq_ and bootId_: a radio restart is NOT a new radio identity.
 }
@@ -141,7 +157,15 @@ void EsbTransport::retry(){
 #endif
   NRF_RADIO->TASKS_DISABLE=1;
   waitDisabled(100);
-  stats_.retries++;phase_=Backoff;
+  stats_.retries++;
+  if(afhEnabled_){
+    consecutiveRetries_++;
+    if(consecutiveRetries_>=10){
+      consecutiveRetries_=0;
+      advanceHopChannel();
+    }
+  }
+  phase_=Backoff;
   // Break repeated collisions without occupying the CPU between attempts.
   retryAt_=(radioNow()+200+((stats_.retries*137+bootId_)&511))&RadioTimeMask;
 }
@@ -157,6 +181,7 @@ bool EsbTransport::acceptReply(){
   peerLocal_=local;lastRx_=millis();stats_.rssi=NRF_RADIO->RSSISAMPLE;
   completedLength_=local?0:pendingLength_;
   pendingSeq_=0;phase_=Idle;lastPoll_=radioNow();
+  consecutiveRetries_=0;
   if(local){pendingLength_=0;rx_.clear();}
   return true;
 }
@@ -190,6 +215,7 @@ void EsbTransport::targetService(){
   NVIC_ClearPendingIRQ(RADIO_IRQn);NVIC_EnableIRQ(RADIO_IRQn);
   NRF_RADIO->TASKS_TXEN=1;
   lastRx_=millis();stats_.rssi=NRF_RADIO->RSSISAMPLE;stats_.tx++;
+  lastTargetHopAt_=lastRx_;
 }
 void EsbTransport::poll(bool dapBusy,bool outboundPending){
   const uint32_t mask=CLOCK_HFCLKSTAT_STATE_Msk|CLOCK_HFCLKSTAT_SRC_Msk;
@@ -203,6 +229,14 @@ void EsbTransport::poll(bool dapBusy,bool outboundPending){
     // Recover an unexpectedly disabled receiver even with no peer traffic.
     if(phase_==Idle && !NRF_RADIO->EVENTS_END && NRF_RADIO->STATE==RADIO_STATE_STATE_Disabled)
       receiveStart();
+    if(afhEnabled_){
+      uint32_t nowMs=millis();
+      if(uint32_t(nowMs-lastTargetHopAt_)>=60){
+        lastTargetHopAt_=nowMs;
+        advanceHopChannel();
+        receiveStart();
+      }
+    }
     return;
   }
   if(phase_==HostTx){
@@ -223,7 +257,7 @@ void EsbTransport::poll(bool dapBusy,bool outboundPending){
   if(completedLength_)return;
   if(outboundPending && connected())return;
 #ifndef WD_DAP_POLL_INTERVAL_US
-#define WD_DAP_POLL_INTERVAL_US (WD_RADIO_MBPS == 2 ? 80U : 150U)
+#define WD_DAP_POLL_INTERVAL_US (WD_RADIO_MBPS == 2 ? 60U : 150U)
 #endif
   if(radioElapsed(radioNow(),lastPoll_)>=(dapBusy?WD_DAP_POLL_INTERVAL_US:(connected()?500U:100U))){
     pendingSeq_=nextSeq();pendingLength_=0;startExchange();

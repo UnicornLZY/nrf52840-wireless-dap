@@ -26,5 +26,16 @@ int main(){
   assert(hostUsbRemountGrace && !hostUsbRecoveryPending);
   mockNow+=249;wirelessLoop();assert(hostUsbDetached);
   mockNow+=1;wirelessLoop();assert(!hostUsbDetached);
-  puts("PASS real recovery: 1.2s tolerated, >3s failed without replay; USB drain, idle detach and 250ms attach");
+
+  // Claude Point 4: Hard recovery timeout when host application (Keil) hangs and never reads USB IN
+  hostUsbRecoveryPending=true;
+  hostUsbRecoveryStartedAt=mockNow;
+  hostUsbRecoveryIdleAt=mockNow;
+  usbDapTx.begin(4); // Stays permanently busy (host abandoned reading)
+  mockNow+=2400;wirelessLoop();assert(!hostUsbDetached); // <2500ms, not triggered yet
+  mockNow+=200;wirelessLoop();assert(hostUsbDetached);  // >=2500ms, hard timeout forces detach!
+  assert(lastDisconnectReason == 7); // DISC_HARD_RECOVERY
+  mockNow+=250;wirelessLoop();assert(!hostUsbDetached); // re-attached
+
+  puts("PASS real recovery: 1.2s tolerated, >3s failed without replay; USB drain, idle detach, hard timeout and 250ms attach");
 }

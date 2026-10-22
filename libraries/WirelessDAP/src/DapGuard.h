@@ -3,10 +3,13 @@
 #include <stddef.h>
 #include <string.h>
 #include "Protocol.h"
+#ifndef WD_DAP240
+#define WD_DAP240 0
+#endif
 #ifndef WD_DAP128
 #define WD_DAP128 0
 #endif
-static constexpr size_t DapPacketSize=WD_DAP128?128:64;
+static constexpr size_t DapPacketSize=WD_DAP240?240:(WD_DAP128?128:64);
 // Check all variable-length requests BEFORE entering the upstream fixed-buffer parser.
 // Atomic, JTAG, SWO and DAP-UART commands are not advertised or accepted.
 inline bool validDap(const uint8_t* q) {

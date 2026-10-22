@@ -4,9 +4,15 @@
 #include <string.h>
 
 namespace wd {
-constexpr uint8_t LinkVersion=WD_DAP128?5:4;
+#ifndef WD_DAP240
+#define WD_DAP240 0
+#endif
+#ifndef WD_DAP128
+#define WD_DAP128 0
+#endif
+constexpr uint8_t LinkVersion=WD_DAP240?14:(WD_DAP128?5:4);
 inline uint16_t nextDapSequence(uint16_t seq){return seq==0xffff?1:uint16_t(seq+1);}
-constexpr size_t PayloadMax = 128;
+constexpr size_t PayloadMax = WD_DAP240?240:(WD_DAP128?128:64);
 constexpr size_t RawMax = PayloadMax + 10;
 constexpr size_t WireMax = RawMax * 2 + 2;
 enum Type : uint8_t { Hello=1, HelloAck, Ping, Pong, DapRequest, DapResponse,

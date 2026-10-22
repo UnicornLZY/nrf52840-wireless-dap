@@ -1,6 +1,10 @@
 #define WD_ROLE_FREE_TEST 1
 #define main unused_role_main
+#ifdef UART_BASELINE
+#include "../../unified_v3_free_recovery/role_test.cpp"
+#else
 #include "../role_test.cpp"
+#endif
 #undef main
 int main(){
   wirelessSetup();mockNow=1000;hostMode=true;localMode=false;resetLinkState();

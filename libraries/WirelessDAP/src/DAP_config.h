@@ -9,10 +9,13 @@
 #define DAP_JTAG_DEV_CNT 0
 #define DAP_DEFAULT_PORT 1U
 #define DAP_DEFAULT_SWJ_CLOCK 4000000U
+#ifndef WD_DAP240
+#define WD_DAP240 0
+#endif
 #ifndef WD_DAP128
 #define WD_DAP128 0
 #endif
-#define DAP_PACKET_SIZE (WD_DAP128 ? 128U : 64U)
+#define DAP_PACKET_SIZE (WD_DAP240 ? 240U : (WD_DAP128 ? 128U : 64U))
 #define DAP_PACKET_COUNT 4U
 #define DAP_FW_V1
 #define SWO_UART 0
@@ -55,8 +58,8 @@
 #define WD_RST 22U
 #define WD_RST_PORT NRF_P0
 #endif
-__STATIC_INLINE uint8_t DAP_GetVendorString(char* s){strcpy(s,"SuperMini DIY");return 14;}
-__STATIC_INLINE uint8_t DAP_GetProductString(char* s){strcpy(s,"Local+Wireless CMSIS-DAP");return 25;}
+__STATIC_INLINE uint8_t DAP_GetVendorString(char* s){strcpy(s,"ARM");return 4;}
+__STATIC_INLINE uint8_t DAP_GetProductString(char* s){strcpy(s,"CMSIS-DAP v2");return 13;}
 __STATIC_INLINE uint8_t DAP_GetSerNumString(char* s){(void)s;return 0;}
 __STATIC_INLINE uint8_t DAP_GetTargetDeviceVendorString(char* s){(void)s;return 0;}
 __STATIC_INLINE uint8_t DAP_GetTargetDeviceNameString(char* s){(void)s;return 0;}
