@@ -121,7 +121,7 @@
 
 * [接线与 Keil MDK 详细配置指南](docs/USAGE.md)
 * [源码构建与编译选项说明](docs/BUILD.md)
-* [架构演进与 2.4GHz 射频协议深度解析](docs/ARCH_RESEARCH_AND_INSPIRATIONS.md)
+* [核心架构与协议设计](docs/DEVELOPMENT.md)
 * [测试与工程验证方法](docs/VALIDATION.md)
 
 ---
