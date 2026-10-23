@@ -4,8 +4,8 @@
   "date": "2026-10-22",
   "reference_firmware": {
     "name": "uart_latency_packet240_unified_v3_p113_2m_fast_ch80_afh_v2.uf2",
-    "sha256": "a0a3a4aee877eaffecbe6ea4ed2a77188a4318426a5fde57be03d3b4e2bd0145",
-    "bytes": 257024,
+    "sha256": "d74bfd01f4b9cb8ddbe999ec025557430fdffb639ee29ad36bbc51ba7a733471",
+    "bytes": 260096,
     "rebuilt_exact_match": true
   },
   "upstream_cmsis_dap_commit": "12636590eec66fae2d1bba4518749426ad5a4595",
@@ -21,11 +21,11 @@
     },
     {
       "path": "libraries/WirelessDAP/src/ConfigDisk.cpp",
-      "sha256": "ed8df48f7ebf43dfbb7b982ebdceaf3974957d692ff92cc2313c8285217ef379"
+      "sha256": "2f97bd990b149170c322c8978220cb6cd7d35d29becf4173b9659a04e28a3083"
     },
     {
       "path": "libraries/WirelessDAP/src/ConfigDisk.h",
-      "sha256": "8d19f838e590eefd3982a76ee3adc2645d1db3ceb5de438ce7310b9244542afc"
+      "sha256": "6b6f581f28c3a1d05c00cb70b3ff8e12fb723ef17549002ddf8e3bd2e1f74805"
     },
     {
       "path": "libraries/WirelessDAP/src/DAP_config.h",
@@ -49,11 +49,11 @@
     },
     {
       "path": "libraries/WirelessDAP/src/DaplinkExe.h",
-      "sha256": "50f827d09eea45f3909c817723344b2feaa02c61eb2d2d6f30565b1753778e72"
+      "sha256": "c0502fe80314d78994a3a0432ab38c978788f5729cecf9c71fac1f37b308ea4a"
     },
     {
       "path": "libraries/WirelessDAP/src/DaplinkHta.h",
-      "sha256": "d71e98a37cd0613ca7eb2f072fbdcdf06457453c38bdbfe78bcb54394277ec0d"
+      "sha256": "3b3bdde3b0ca86e89b53f43f170c6fe45fbf80089551a345f9b6fe843acf7987"
     },
     {
       "path": "libraries/WirelessDAP/src/EsbPacket.h",
@@ -113,7 +113,7 @@
     },
     {
       "path": "libraries/WirelessDAP/src/WirelessDAP.cpp",
-      "sha256": "7518b541e2ba2667bcf68f287fb99a86b50782452811201f71f3c8bdbe0b789f"
+      "sha256": "e83975bb924e764a68c682740e99b7341183d548c0e1c3098656e6dfd33ca43c"
     },
     {
       "path": "libraries/WirelessDAP/src/WirelessDAP.h",

@@ -169,8 +169,8 @@ static void LoadConfig() {
             else if (tp == 0) SendMessage(g_hCmbTxPower, CB_SETCURSEL, 2, 0);
             else if (tp == -4) SendMessage(g_hCmbTxPower, CB_SETCURSEL, 3, 0);
         } else if (_stricmp(key, "ROLE") == 0) {
-            if (_strnicmp(val, "HOST", 4) == 0) SendMessage(g_hCmbRole, CB_SETCURSEL, 1, 0);
-            else if (_strnicmp(val, "TARGET", 6) == 0) SendMessage(g_hCmbRole, CB_SETCURSEL, 2, 0);
+            if (_strnicmp(val, "ROLE_A", 6) == 0 || _stricmp(val, "A") == 0 || _stricmp(val, "HOST") == 0 || _stricmp(val, "1") == 0) SendMessage(g_hCmbRole, CB_SETCURSEL, 1, 0);
+            else if (_strnicmp(val, "ROLE_B", 6) == 0 || _stricmp(val, "B") == 0 || _stricmp(val, "TARGET") == 0 || _stricmp(val, "2") == 0) SendMessage(g_hCmbRole, CB_SETCURSEL, 2, 0);
             else SendMessage(g_hCmbRole, CB_SETCURSEL, 0, 0);
         }
     }
@@ -281,7 +281,7 @@ static void SaveConfig() {
     int tpVal = (tpIdx == 1) ? 4 : ((tpIdx == 2) ? 0 : ((tpIdx == 3) ? -4 : 8));
 
     int roIdx = (int)SendMessage(g_hCmbRole, CB_GETCURSEL, 0, 0);
-    const char* roVal = (roIdx == 1) ? "HOST" : ((roIdx == 2) ? "TARGET" : "AUTO");
+    const char* roVal = (roIdx == 1) ? "ROLE_A" : ((roIdx == 2) ? "ROLE_B" : "AUTO");
 
     char out[512];
     int len = snprintf(out, sizeof(out),
@@ -380,9 +380,9 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             CreateWindowW(L"STATIC", L"运行角色 (ROLE)", WS_CHILD | WS_VISIBLE, 26, 372, 180, 20, hWnd, NULL, NULL, NULL);
             g_hCmbRole = CreateWindowW(L"COMBOBOX", NULL, WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST,
                                        220, 368, 170, 120, hWnd, (HMENU)IDC_CMB_ROLE, NULL, NULL);
-            SendMessageW(g_hCmbRole, CB_ADDSTRING, 0, (LPARAM)L"AUTO (自动嗅探 · 推荐)");
-            SendMessageW(g_hCmbRole, CB_ADDSTRING, 0, (LPARAM)L"HOST (电脑端发射器)");
-            SendMessageW(g_hCmbRole, CB_ADDSTRING, 0, (LPARAM)L"TARGET (目标端接收器)");
+            SendMessageW(g_hCmbRole, CB_ADDSTRING, 0, (LPARAM)L"AUTO (自动协商 · 推荐)");
+            SendMessageW(g_hCmbRole, CB_ADDSTRING, 0, (LPARAM)L"角色A (主动发起端 / A车)");
+            SendMessageW(g_hCmbRole, CB_ADDSTRING, 0, (LPARAM)L"角色B (被动响应端 / B车)");
             SendMessageW(g_hCmbRole, CB_SETCURSEL, 0, 0);
 
             g_hBtnSave = CreateWindowW(L"BUTTON", L"💾 保存配置并软重启生效",

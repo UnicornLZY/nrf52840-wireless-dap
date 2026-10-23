@@ -201,7 +201,7 @@ void ConfigDisk::begin() {
 }
 
 void ConfigDisk::refreshConfigText() {
-  const char* roleStr = (config_.role == 1) ? "HOST" : ((config_.role == 2) ? "TARGET" : "AUTO");
+  const char* roleStr = (config_.role == 1) ? "ROLE_A" : ((config_.role == 2) ? "ROLE_B" : "AUTO");
   memset(configText_, 0, sizeof(configText_));
   configTextLen_ = snprintf(configText_, sizeof(configText_),
     "\xEF\xBB\xBF"
@@ -217,7 +217,7 @@ void ConfigDisk::refreshConfigText() {
     "# 发射功率 (+8, +4, 0, -4, -8, -12, -16, -20 dBm)\r\n"
     "TX_POWER=%d\r\n"
     "\r\n"
-    "# 运行角色 (AUTO, HOST, TARGET)\r\n"
+    "# 运行角色 (AUTO: 自动协商, ROLE_A: 角色A主机, ROLE_B: 角色B从机)\r\n"
     "ROLE=%s\r\n"
     "\r\n"
     "# DAP协议 (2: v2 WinUSB极速, 1: v1 HID兼容)\r\n"
@@ -238,8 +238,8 @@ void ConfigDisk::refreshConfigText() {
 }
 
 void ConfigDisk::refreshStatusText() {
-  const char* rStr = isHost_ ? "HOST (电脑端)" : "TARGET (目标侧)";
-  if (isLocal_) rStr = "TARGET (有线直连)";
+  const char* rStr = (config_.role == 1) ? "角色A (主机/主动端)" : ((config_.role == 2) ? "角色B (从机/响应端)" : (isLocal_ ? "TARGET (有线直连)" : (isHost_ ? "HOST (自动电脑端)" : "TARGET (自动目标侧)")));
+  if (isLocal_ && config_.role == 0) rStr = "TARGET (有线直连)";
   const char* lStr = isReady_ ? "已连接 (Connected)" : "等待连接 (Connecting...)";
   const char* protoStr = (config_.protocol == 1) ? "CMSIS-DAP v1 (HID 兼容)" : "CMSIS-DAP v2 (WinUSB 极速)";
   float retRate = (txCount_ > 0) ? ((float)retries_ / (txCount_ + 1) * 100.0f) : 0.0f;
@@ -464,8 +464,8 @@ bool ConfigDisk::handleFlush() {
       }
     } else if (iequals(key, "ROLE")) {
       uint8_t r = 0;
-      if (iequals(val, "HOST")) r = 1;
-      else if (iequals(val, "TARGET")) r = 2;
+      if (iequals(val, "ROLE_A") || iequals(val, "A") || iequals(val, "HOST") || iequals(val, "1")) r = 1;
+      else if (iequals(val, "ROLE_B") || iequals(val, "B") || iequals(val, "TARGET") || iequals(val, "2")) r = 2;
       else r = 0;
       if (r != newCfg.role) { newCfg.role = r; modified = true; }
     } else if (iequals(key, "PROTOCOL")) {

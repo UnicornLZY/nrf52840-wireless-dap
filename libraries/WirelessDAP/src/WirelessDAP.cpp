@@ -939,8 +939,8 @@ void wirelessSetup() {
   transport.setPairCode(configDisk.config().pairCode);
   transport.setChannel(configDisk.config().channel);
   transport.setTxPower(configDisk.config().txPower);
-  if(configDisk.config().role == 1) hostMode = true;
-  else if(configDisk.config().role == 2) hostMode = false;
+  if(configDisk.config().role == 1) { hostMode = true; preferredRole = HostRole; transport.setRole(true); }
+  else if(configDisk.config().role == 2) { hostMode = false; preferredRole = TargetRole; transport.setRole(false); }
   usbEverMounted=false;
   lastUsbMountedAt=0;
   localMode=false;
@@ -1019,13 +1019,13 @@ void wirelessLoop() {
   bool now=false;
   if(!hostMode && transport.connected())targetPeerSeen=true;
   bool usbPresent=(NRF_POWER->USBREGSTATUS&POWER_USBREGSTATUS_VBUSDETECT_Msk)!=0;
-  if(roleProbePending){taskYIELD();return;}
-  if(roleProbeApply){
+  if(configDisk.config().role == 0 && roleProbePending){taskYIELD();return;}
+  if(configDisk.config().role == 0 && roleProbeApply){
     preferredRole=roleProbeFound?TargetRole:AutoRole;
     targetPeerSeen=roleProbeFound || (!hostMode && transport.connected());
     roleProbeApply=false;
   }
-  if((!roleProbeStarted || (usbPresent && !roleProbeUsbWasPresent)) &&
+  if(configDisk.config().role == 0 && (!roleProbeStarted || (usbPresent && !roleProbeUsbWasPresent)) &&
      !dapRunning && dapCount==0 && uxQueueMessagesWaiting(dapJobs)==0 &&
      uxQueueMessagesWaiting(dapResults)==0 && !localDapConnected){
     Frame probe={};probe.type=0xfe;
@@ -1105,6 +1105,23 @@ void wirelessLoop() {
   // USB re-enumeration during a flash operation must not tear down its DAP
   // worker/session. A's independent 3.3 V supply does not assert USB VBUS.
   bool targetLocalUsb=preferredRole==TargetRole?usbPresent:usbDataPresent;
+  if(configDisk.config().role == 1){
+    // 角色A: 强制固定为主机 (PTX 发射端)，双车纯串口或无线DAP，绝不降级为接收端
+    if(!hostMode){
+      hostMode=true;localMode=false;
+      transport.setRole(true);
+      resetLinkState();seenGeneration=generation;wasConnected=false;
+    }
+    localMode=false;usbHidden=false;
+  } else if(configDisk.config().role == 2){
+    // 角色B: 强制固定为从机 (PRX 接收端)，被动响应端，绝不切换为主机
+    if(hostMode){
+      hostMode=false;localMode=false;
+      transport.setRole(false);
+      resetLinkState();seenGeneration=generation;wasConnected=false;
+    }
+    localMode=false;usbHidden=false;
+  } else {
   // A power-only supply can keep VBUS high after its data cable is removed.
   // Only an intentionally hidden B USB may retain the PTX role without a
   // configured host. Otherwise two former USB boards can both stay PTX.
@@ -1158,6 +1175,7 @@ if(!hostMode){
 #endif
   }
 }
+  }
 #if WD_ESB
 if(hostMode){
   // A may have switched to local USB while an RF data packet was pending.
@@ -1201,7 +1219,7 @@ if(hostMode && !localMode){
 }
     usbPacketTail=(tail+1)&(UsbPacketCount-1);
   }
-  if(hostMode && !localMode && !ready && !transport.connected() && TinyUSBDevice.mounted()
+  if(configDisk.config().role == 0 && hostMode && !localMode && !ready && !transport.connected() && TinyUSBDevice.mounted()
 #if WD_LINK_RECOVERY_TEST
      && !wirelessHostSeen && preferredRole!=HostRole
 #endif
@@ -1379,7 +1397,7 @@ if(hostMode && !localMode){
 }
   serviceUartSettings();
   serviceUart();
-  if(localMode && localLeaseForDap && !localDapConnected && !dapRunning &&
+  if(configDisk.config().role == 0 && localMode && localLeaseForDap && !localDapConnected && !dapRunning &&
      uxQueueMessagesWaiting(dapJobs)==0 && uxQueueMessagesWaiting(dapResults)==0 &&
      uxQueueMessagesWaiting(usbRequests)==0 && usbPacketHead==usbPacketTail &&
      uint32_t(ms-lastLocalDapAt)>1000U){

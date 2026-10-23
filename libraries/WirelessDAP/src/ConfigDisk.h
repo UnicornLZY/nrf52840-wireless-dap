@@ -15,7 +15,7 @@ struct DeviceConfig {
   uint32_t pairCode;   // Default: 123456
   uint8_t  channel;    // Default: 80
   int8_t   txPower;    // Default: +8
-  uint8_t  role;       // 0: AUTO, 1: HOST, 2: TARGET
+  uint8_t  role;       // 0: AUTO, 1: ROLE_A (主机/主动发起端), 2: ROLE_B (从机/被动响应端)
   uint8_t  protocol;   // 0 or 2: CMSIS-DAP v2 (WinUSB), 1: CMSIS-DAP v1 (HID)
   uint32_t crc;
 };

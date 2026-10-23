@@ -80,11 +80,12 @@
 ### 方式一：使用内置图形上位机（推荐）
 直接在虚拟磁盘根目录（或仓库 [`tools/DAPLINK.exe`](tools/DAPLINK.exe)）双击打开 **`DAPLINK.exe`**：
 * 30KB 极简原生 Win32 程序，无任何 DLL 或运行时依赖。
-* 可视化修改：**配对码 (Pair Code)**、**通信信道 (Channel 0~80)**、**发射功率 (Tx Power)**、**DAP 协议版本 (v1 HID / v2 WinUSB Bulk)**、**AFH 跳频开关**。
+* 可视化修改：**配对码 (Pair Code)**、**通信信道 (Channel 0~80)**、**发射功率 (Tx Power)**、**运行角色 (AUTO 自动协商 / 角色A 主机发起端 / 角色B 从机响应端)**、**DAP 协议版本 (v1 HID / v2 WinUSB Bulk)**。
+* 特别针对**双车模块/纯硬件串口透传**场景：分别将两板设为**角色A**与**角色B**，两板仅接串口引脚（TX/RX）即可无线无缝对连，不接任何电脑 USB 也能永不掉线、绝不降级。
 * 点击 **保存并重启**，配置将写入片上 Flash 掉电保存，探针自动重启生效。
 
 ### 方式二：直接修改文本
-记事本打开虚拟磁盘中的 `CONFIG.TXT`，修改对应键值（如 `CHANNEL=80`、`PROTOCOL=2`）后保存，探针将在 2 秒后自动写入 Flash 并重启。
+记事本打开虚拟磁盘中的 `CONFIG.TXT`，修改对应键值（如 `CHANNEL=80`、`ROLE=ROLE_A`、`PROTOCOL=2`）后保存，探针将在 2 秒后自动写入 Flash 并重启。
 
 ---
 
