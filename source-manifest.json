@@ -4,8 +4,8 @@
   "date": "2026-10-22",
   "reference_firmware": {
     "name": "uart_latency_packet240_unified_v3_p113_2m_fast_ch80_afh_v2.uf2",
-    "sha256": "d74bfd01f4b9cb8ddbe999ec025557430fdffb639ee29ad36bbc51ba7a733471",
-    "bytes": 260096,
+    "sha256": "d6e53cc4590cd6b8b0a6c91f6f55f8d0f42ee54b3f43616e726092a1e520c3ce",
+    "bytes": 289792,
     "rebuilt_exact_match": true
   },
   "upstream_cmsis_dap_commit": "12636590eec66fae2d1bba4518749426ad5a4595",
@@ -49,7 +49,7 @@
     },
     {
       "path": "libraries/WirelessDAP/src/DaplinkExe.h",
-      "sha256": "c0502fe80314d78994a3a0432ab38c978788f5729cecf9c71fac1f37b308ea4a"
+      "sha256": "dde78e26b5108fdfbbac2ec779ca82a18dbc1a5d9906375c7c70c5d2b76b8ace"
     },
     {
       "path": "libraries/WirelessDAP/src/DaplinkHta.h",

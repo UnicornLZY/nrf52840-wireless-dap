@@ -87,7 +87,7 @@ int main() {
   // 6. Read DAPLINK.EXE sectors (10..10+exeClusters-1)
   uint32_t exeLen = sizeof(DAPLINK_EXE);
   uint32_t exeClusters = (exeLen + 511) / 512;
-  uint8_t assembledExe[32768] = {};
+  uint8_t assembledExe[65536] = {};
   for (uint32_t s = 0; s < exeClusters; s++) {
     r = ConfigDisk::readCallback(10 + s, assembledExe + s * 512, 512);
     assert(r == 512);
