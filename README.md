@@ -1,8 +1,8 @@
-# nRF52840 Wireless CMSIS-DAP v2 + CDC UART (v4.3 稳定版)
+# nRF52840 Wireless CMSIS-DAP v2 + CDC UART (v4.4 稳定版)
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Unit Tests](https://img.shields.io/badge/Tests-9%2F9%20PASS-brightgreen.svg)](tests/)
-[![Firmware](https://img.shields.io/badge/UF2-v4.3%20Ultra240B-orange.svg)](firmware/)
+[![Unit Tests](https://img.shields.io/badge/Tests-13%2F13%20PASS-brightgreen.svg)](tests/)
+[![Firmware](https://img.shields.io/badge/UF2-v4.4%20Ultra240B-orange.svg)](firmware/)
 
 使用两块 SuperMini / nice!nano 兼容的 **Nordic nRF52840** 开发板，基于 Nordic 2.4 GHz 高速私有射频链路（Nordic ESB / RADIO 2 Mbps）实现的**低延迟无线 CMSIS-DAP v2（SWD 烧录与调试）**和**全双工无线虚拟串口（CDC ACM UART）**。
 
@@ -27,9 +27,12 @@
   - **慢闪 (1 Hz)**：无线搜索配对中（未建立连接）。
   - **常亮 (Solid ON)**：无线链路已锁定就绪（Idle Connected）。
   - **快闪 (10 Hz 爆闪)**：SWD 烧录活跃 / 批量数据传输中。
-* 🔄 **单固件自由角色 + 有线/无线自动切换**：
+* 🔄 **单固件自由角色 + 数据线/充电线智能识别**：
   - 双板共用一份 UF2 固件，硬件上电自动检测：接目标 MCU 的板自动成为**目标从机（A 端）**；接电脑 USB 且未接目标的板自动成为**电脑主机（B 端）**。
-  - 目标端若直接插电脑 USB，平滑无缝切换为有线直连调试器，拔掉数据线（保持 3.3V 独立供电）即秒回无线模式。
+  - **充电线/数据线智能识别**：从机插充电头或充电宝供电（仅供电无 USB 数据枚举）不抢占本地模式，保持无线连接；插电脑且完成 USB 枚举时无缝切换为有线直连调试器，拔掉数据线即秒回无线模式。
+* ⚡ **P1.13 烧录完成强制硬件复位**：
+  - 在 DAP 会话批量写入 Flash 结束并收到 `DAP_Disconnect` 时，目标端自动向 `P1.13` 输出 20ms 开漏硬件复位低脉冲后释放。
+  - 完美解决 Keil 未勾选 `Reset and Run` 或部分 MCU 需要物理硬件复位线的场景；若不接 `P1.13`，依然保留原有 4 线 SWD 软件复位机制，双向完全兼容。
 * 📟 **低延迟全双工无线串口 (CDC UART)**：
   默认 `115200 8N1`，支持 `1200` ~ `1000000` 常用波特率及 `8N1/8N2/8E1/8E2` 参数同步，支持 1 ms 短帧合包与智能重传。
 
@@ -48,11 +51,11 @@
 | **`GND`** | **`GND`** | **必须共地** |
 | **`P0.02`** | **`UART RX`** | 探针 TX -> 接目标板 RX（需要串口时连接） |
 | **`P1.15`** | **`UART TX`** | 探针 RX <- 接目标板 TX（需要串口时连接） |
-| **`P1.13`** | **`nRESET`** | 目标硬件复位（可选，普通使用可不接，默认走 SWD 软复位） |
+| **`P1.13`** | **`nRESET`** | 目标硬件开漏复位（可选；连接后在烧录完成自动拉低 20ms 硬件复位；不接走 SWD 软件复位） |
 
 > **⚠️ 接线与供电避坑指南**：
 > 1. **供电电平**：所有 GPIO 为 **3.3V 电平**，严禁直连 5V 单片机引脚。
-> 2. **A 端供电方式**：无线烧录时，A 端（目标端）请通过 `3.3V` 或 `BAT` 引脚供电，**切勿使用 A 端的 Type-C 接口插充电头供电**（会触发 VBUS 检测误入本地有线模式）。
+> 2. **A 端供电方式**：支持通过 `3.3V`、`BAT` 引脚或 **Type-C 接口插充电头/充电宝供电**。新版本已加入智能枚举识别，仅供电不枚举不会误切本地有线模式，保持稳定无线连接；若需本地有线烧录，直接使用数据线插电脑即可。
 > 3. **板载 `RST` 孔位说明**：夹在右侧 `GND` 和 `3.3V` 之间的 `RST` 是 nRF52840 芯片自身的复位口，不是目标的复位口！若使用排线，可在该孔插一根空杜邦线头占位防止错位。
 
 ---
@@ -62,7 +65,7 @@
 本项目已提供硬件实测验证的最新稳定版 UF2 固件在 [`firmware/`](firmware/) 目录中：
 
 * **固件文件**：[`firmware/uart_latency_packet240_unified_v3_p113_2m_fast_ch80_afh_v2.uf2`](firmware/uart_latency_packet240_unified_v3_p113_2m_fast_ch80_afh_v2.uf2)
-* **SHA-256**：`A0A3A4AEE877EAFFECBE6EA4ED2A77188A4318426A5FDE57BE03D3B4E2BD0145`
+* **SHA-256**：`0E18352C8134C9156C4E17B8434F618E2A2356773403EB95D4BCFEA31BFE3C6A`
 
 ### 刷录步骤：
 1. 用 USB 数据线将 nRF52840 开发板连接至电脑。

@@ -50,9 +50,11 @@ extern uint8_t desc_ms_os_20[];
 #include "arm/DAP.h"
 #include "SoftReset.h"
 #include "ResetRun.h"
+#include "HardwareResetRequest.h"
+#include "DownloadSessionReset.h"
 
-// One image runs either radio role. USB VBUS selects the polling side;
-// without VBUS the board listens and serves the remote target.
+// One image supports saved HOST/TARGET locks or automatic radio-role discovery.
+// Only an enumerated USB data connection can take local target ownership.
 static bool hostMode=false;
 static bool usbEverMounted=false;
 static uint32_t lastUsbMountedAt=0;
@@ -272,6 +274,8 @@ static uint16_t localUsbSeq=0;
 static volatile bool localMode=false;
 static volatile bool localDapConnected=false;
 static BoardPreference preferredRole=AutoRole;
+// Snapshot the saved UI role at boot; edits take effect after its normal reboot.
+static uint8_t configuredRole=0; // Config encoding: 0=AUTO, 1=HOST, 2=TARGET.
 static uint32_t startupResetReason=0;
 // Once this power session has served a wireless host, a momentary RF expiry
 // during USB insertion must not promote the target into a second PTX host.
@@ -431,8 +435,16 @@ static bool detectLocalSwdTarget(){
   PORT_OFF();DAP_Setup();
   return found;
 }
+// P1.13 is open drain: assert low for 20 ms, then release to the target pull-up.
+static void pulseTargetHardwareReset() {
+  PIN_nRESET_OUT(0);
+  delay(20);
+  PIN_nRESET_OUT(1);
+}
 static void dapWorker(void*) {
   ResetRun resetRun;
+  HardwareResetRequest hardwareReset;
+  DownloadSessionReset downloadReset;
 #if WD_RUN_KICK
   DapRunKick runKick;
 #endif
@@ -459,7 +471,7 @@ static void dapWorker(void*) {
       lastBurnActivityAt=millis();
     }
     if(initializedSession!=job.session || initializedEpoch!=epoch){
-      resetRun.clear();DAP_Setup();initializedSession=job.session;initializedEpoch=epoch;
+      resetRun.clear();hardwareReset.clear();downloadReset.clear();DAP_Setup();initializedSession=job.session;initializedEpoch=epoch;
       DAP_Data.debug_port=DAP_PORT_SWD;
       PORT_SWD_SETUP();
 
@@ -500,7 +512,7 @@ static void dapWorker(void*) {
       else if(job.data[0]==0x06)result.len=4;
     }
     else if(job.data[0]==0x0a){
-      // Explicit reset command: execute SYSRESETREQ over SWD, without NRST.
+      // Original four-wire reset: SYSRESETREQ over SWD, no NRST wire required.
       if(DAP_Data.debug_port!=DAP_PORT_SWD || (NRF_P0->PIN_CNF[WD_CLK]&1)==0){
         DAP_Data.debug_port=DAP_PORT_SWD;
         PORT_SWD_SETUP();
@@ -573,12 +585,22 @@ static void dapWorker(void*) {
 #endif
       if(job.data[0]==0 && job.data[1]==0xf0)result.data[2]&=~0x10;
     }
-    if(epoch!=dapEpoch || local!=localMode || (!local && (!ready || result.session!=session))){resetRun.clear();PORT_OFF();continue;}
+    if(epoch!=dapEpoch || local!=localMode || (!local && (!ready || result.session!=session))){resetRun.clear();hardwareReset.clear();downloadReset.clear();PORT_OFF();continue;}
+    // Preserve the original Keil Reset and Run compatibility path, including
+    // its SWD software fallback when the target NRST wire is absent.
     if(resetRun.observe(job.data,result.data) && DAP_Data.debug_port==DAP_PORT_SWD){
       dapStartedAt=millis();dapRunning=true;
-      // SWJ_Pins has no status field. Keep the actual pin reply; do not
-      // fabricate success of the software reset from the released pin level.
       resetCortexMViaSwd(DAP_ProcessCommand);
+      dapRunning=false;
+    }
+    bool explicitReset=hardwareReset.observe(job.data,job.len,result.data,result.len) && DAP_Data.debug_port==DAP_PORT_SWD;
+    bool downloadEnded=downloadReset.observe(job.data,job.len,result.data,result.len);
+    if(explicitReset)downloadReset.resetIssued();
+    if(downloadEnded){
+      dapStartedAt=millis();dapRunning=true;
+      // A bulk-write session ending with Disconnect gets a physical pulse
+      // even when Keil's Reset and Run checkbox is OFF.
+      pulseTargetHardwareReset();
       dapRunning=false;
     }
     if(local){
@@ -595,8 +617,8 @@ static void dapWorker(void*) {
       if(queued)break;
       vTaskDelay(1);
     }
-    // Disconnect releases pins only. Reset is exclusively controlled by the
-    // debugger's explicit reset commands, never by link changes/disconnect.
+    // Only explicit download-session teardown or reset requests pulse NRST.
+    // Link loss, USB removal and idle time must not reset the target.
     taskYIELD();
   }
 }
@@ -936,11 +958,14 @@ void wirelessSetup() {
   preferredRole=boardPreference(NRF_FICR->DEVICEID[0],NRF_FICR->DEVICEID[1]);
   targetPeerSeen=preferredRole==TargetRole;
   configDisk.init();
+  configuredRole=configDisk.config().role;
+  if(configuredRole==1)preferredRole=HostRole;
+  else if(configuredRole==2)preferredRole=TargetRole;
+  targetPeerSeen=preferredRole==TargetRole;
   transport.setPairCode(configDisk.config().pairCode);
   transport.setChannel(configDisk.config().channel);
   transport.setTxPower(configDisk.config().txPower);
-  if(configDisk.config().role == 1) { hostMode = true; preferredRole = HostRole; transport.setRole(true); }
-  else if(configDisk.config().role == 2) { hostMode = false; preferredRole = TargetRole; transport.setRole(false); }
+  hostMode=configuredRole==1;
   usbEverMounted=false;
   lastUsbMountedAt=0;
   localMode=false;
@@ -1019,13 +1044,13 @@ void wirelessLoop() {
   bool now=false;
   if(!hostMode && transport.connected())targetPeerSeen=true;
   bool usbPresent=(NRF_POWER->USBREGSTATUS&POWER_USBREGSTATUS_VBUSDETECT_Msk)!=0;
-  if(configDisk.config().role == 0 && roleProbePending){taskYIELD();return;}
-  if(configDisk.config().role == 0 && roleProbeApply){
+  if(roleProbePending){taskYIELD();return;}
+  if(roleProbeApply){
     preferredRole=roleProbeFound?TargetRole:AutoRole;
     targetPeerSeen=roleProbeFound || (!hostMode && transport.connected());
     roleProbeApply=false;
   }
-  if(configDisk.config().role == 0 && (!roleProbeStarted || (usbPresent && !roleProbeUsbWasPresent)) &&
+  if(configuredRole==0 && (!roleProbeStarted || (usbPresent && !roleProbeUsbWasPresent)) &&
      !dapRunning && dapCount==0 && uxQueueMessagesWaiting(dapJobs)==0 &&
      uxQueueMessagesWaiting(dapResults)==0 && !localDapConnected){
     Frame probe={};probe.type=0xfe;
@@ -1101,31 +1126,15 @@ void wirelessLoop() {
     }
   }
 #endif
-  // The proven target-side firmware owns local SWD for the full VBUS period.
-  // USB re-enumeration during a flash operation must not tear down its DAP
-  // worker/session. A's independent 3.3 V supply does not assert USB VBUS.
-  bool targetLocalUsb=preferredRole==TargetRole?usbPresent:usbDataPresent;
-  if(configDisk.config().role == 1){
-    // 角色A: 强制固定为主机 (PTX 发射端)，双车纯串口或无线DAP，绝不降级为接收端
-    if(!hostMode){
-      hostMode=true;localMode=false;
-      transport.setRole(true);
-      resetLinkState();seenGeneration=generation;wasConnected=false;
-    }
-    localMode=false;usbHidden=false;
-  } else if(configDisk.config().role == 2){
-    // 角色B: 强制固定为从机 (PRX 接收端)，被动响应端，绝不切换为主机
-    if(hostMode){
-      hostMode=false;localMode=false;
-      transport.setRole(false);
-      resetLinkState();seenGeneration=generation;wasConnected=false;
-    }
-    localMode=false;usbHidden=false;
-  } else {
-  // A power-only supply can keep VBUS high after its data cable is removed.
+  // VBUS alone is also asserted by chargers and power-only USB cables.
+  // Only a configured USB data connection (with the existing 2s remount
+  // grace) may take local SWD/UART ownership, regardless of radio role.
+  bool targetLocalUsb=usbDataPresent;
+  // In AUTO, a power-only supply can keep VBUS high after data removal.
+  // A configured HOST remains the polling side even on standalone power.
   // Only an intentionally hidden B USB may retain the PTX role without a
   // configured host. Otherwise two former USB boards can both stay PTX.
-  if(hostMode && !usbDataPresent && !usbHidden){
+  if(configuredRole==0 && hostMode && !usbDataPresent && !usbHidden){
     hostMode=false;localMode=false;localDapConnected=false;
     targetPeerSeen=preferredRole==TargetRole;
     localLeaseForDap=false;usbHidden=false;
@@ -1133,7 +1142,7 @@ void wirelessLoop() {
     xQueueReset(dapJobs);xQueueReset(dapResults);
     xQueueReset(usbRequests);usbPacketTail=usbPacketHead;dapHead=dapCount=0;
     resetLinkState();seenGeneration=generation;wasConnected=false;
-  } else if(!hostMode && usbDataPresent && !localMode &&
+  } else if(configuredRole==0 && !hostMode && usbDataPresent && !localMode &&
             (preferredRole==HostRole ||
              (preferredRole==AutoRole && !targetPeerSeen && !transport.connected()))){
     // An idle board connected to a PC becomes the radio polling side.
@@ -1175,7 +1184,6 @@ if(!hostMode){
 #endif
   }
 }
-  }
 #if WD_ESB
 if(hostMode){
   // A may have switched to local USB while an RF data packet was pending.
@@ -1219,7 +1227,7 @@ if(hostMode && !localMode){
 }
     usbPacketTail=(tail+1)&(UsbPacketCount-1);
   }
-  if(configDisk.config().role == 0 && hostMode && !localMode && !ready && !transport.connected() && TinyUSBDevice.mounted()
+  if(configuredRole==0 && hostMode && !localMode && !ready && !transport.connected() && TinyUSBDevice.mounted()
 #if WD_LINK_RECOVERY_TEST
      && !wirelessHostSeen && preferredRole!=HostRole
 #endif
@@ -1397,7 +1405,7 @@ if(hostMode && !localMode){
 }
   serviceUartSettings();
   serviceUart();
-  if(configDisk.config().role == 0 && localMode && localLeaseForDap && !localDapConnected && !dapRunning &&
+  if(localMode && localLeaseForDap && !localDapConnected && !dapRunning &&
      uxQueueMessagesWaiting(dapJobs)==0 && uxQueueMessagesWaiting(dapResults)==0 &&
      uxQueueMessagesWaiting(usbRequests)==0 && usbPacketHead==usbPacketTail &&
      uint32_t(ms-lastLocalDapAt)>1000U){

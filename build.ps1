@@ -17,8 +17,10 @@ if (-not $Cli) {
 }
 
 if (-not $Python) {
-  if (Get-Command python -ErrorAction SilentlyContinue) { $Python = 'python' }
-  elseif (Test-Path 'C:\Users\LZY\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe') { $Python = 'C:\Users\LZY\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' }
+  if (Test-Path 'C:\Users\LZY\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe') {
+    $Python = 'C:\Users\LZY\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe'
+  }
+  elseif (Get-Command python -ErrorAction SilentlyContinue) { $Python = 'python' }
   else { throw 'python not found. Please specify -Python path.' }
 }
 

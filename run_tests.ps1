@@ -5,7 +5,7 @@ New-Item -ItemType Directory -Force -Path $out | Out-Null
 $flags=@('-std=c++11','-Wall','-Wextra','-Werror','-DWD_SPEED_TEST=1','-DWD_DAP128=1','-DCFG_TUD_VENDOR_TX_BUFSIZE=128','-DWD_USB_COMPAT=1','-DWD_COMPACT_WIRE_TEST=1','-DWD_LINK_RECOVERY_TEST=1','-DWD_SESSION_RESTART_TEST=1','-DWD_ONE_ROW_RESET_P113_TEST=1','-DWD_SOFT_RESET_VERIFY=1','-DHOST_TEST=1')
 
 # Core integration tests
-foreach($test in @('free_role_test','packet128_test','recovery_test','uart_latency_test','uart_timing_probe','config_disk_test','afh_test','usb_compat_test')){
+foreach($test in @('free_role_test','packet128_test','recovery_test','uart_latency_test','uart_timing_probe','config_disk_test','afh_test','usb_compat_test','hardware_reset_request_test','hardware_reset_worker_test','download_session_reset_test','locked_roles_usb_test')){
   $exe=Join-Path $out "$test.exe"
   & $Cxx @flags -I "$PSScriptRoot\tests\mocks" -I "$PSScriptRoot\libraries\WirelessDAP\src" "$PSScriptRoot\tests\$test.cpp" "$PSScriptRoot\libraries\WirelessDAP\src\ConfigDisk.cpp" -o $exe
   if($LASTEXITCODE -ne 0){throw "$test compilation failed"}

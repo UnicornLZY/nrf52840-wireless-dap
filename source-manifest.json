@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
-  "snapshot": "v4.3-ultra240-bulk-afh-configdisk",
-  "date": "2026-10-22",
+  "snapshot": "v4.4-hardware-reset-smart-cable",
+  "date": "2026-10-30",
   "reference_firmware": {
     "name": "uart_latency_packet240_unified_v3_p113_2m_fast_ch80_afh_v2.uf2",
-    "sha256": "d6e53cc4590cd6b8b0a6c91f6f55f8d0f42ee54b3f43616e726092a1e520c3ce",
-    "bytes": 289792,
+    "sha256": "0e18352c8134c9156c4e17b8434f618e2a2356773403eb95d4bcfea31bfe3c6a",
+    "bytes": 291328,
     "rebuilt_exact_match": true
   },
   "upstream_cmsis_dap_commit": "12636590eec66fae2d1bba4518749426ad5a4595",
@@ -56,6 +56,10 @@
       "sha256": "3b3bdde3b0ca86e89b53f43f170c6fe45fbf80089551a345f9b6fe843acf7987"
     },
     {
+      "path": "libraries/WirelessDAP/src/DownloadSessionReset.h",
+      "sha256": "ec97c2bc699e31a6a2e9d04c44ff3117dcbf8070b439b2d51aff83baa86dd84f"
+    },
+    {
       "path": "libraries/WirelessDAP/src/EsbPacket.h",
       "sha256": "fc5d3b26fd843faa0808b592dd3bf5791900a42666a0103d8561465500da66ce"
     },
@@ -66,6 +70,10 @@
     {
       "path": "libraries/WirelessDAP/src/EsbTransport.h",
       "sha256": "cf71473d9dcb871c4b6ecd8fc22108af6942e02303e62ad98a5f87ac65693dec"
+    },
+    {
+      "path": "libraries/WirelessDAP/src/HardwareResetRequest.h",
+      "sha256": "f8886a27b47fd1784c52c0cd203cc76314d0a1e7bff162fa994b00bd2f51eb54"
     },
     {
       "path": "libraries/WirelessDAP/src/PacketStats.h",
@@ -113,7 +121,7 @@
     },
     {
       "path": "libraries/WirelessDAP/src/WirelessDAP.cpp",
-      "sha256": "e83975bb924e764a68c682740e99b7341183d548c0e1c3098656e6dfd33ca43c"
+      "sha256": "feae4ab58f8ce9571b802283b055785d7814f48455e719783100d33d642ce76a"
     },
     {
       "path": "libraries/WirelessDAP/src/WirelessDAP.h",

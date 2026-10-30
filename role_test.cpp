@@ -21,8 +21,25 @@ void DAP_Setup(){}
 static unsigned mockDapExecutions=0;
 static uint32_t mockLastSwdClock=0;
 static bool mockTargetAttached=false;
+#ifdef WD_HW_RESET_TEST
+static unsigned mockSoftwareResetWrites=0,mockSoftwareResetReads=0;
+static bool mockSoftwareResetFails=false;
+#endif
 uint32_t DAP_ProcessCommand(const uint8_t* q,uint8_t* r){mockDapExecutions++;r[0]=q[0];r[1]=1;
 if(q[0]==0x11)mockLastSwdClock=wd::read32(q+1);
+#ifdef WD_HW_RESET_TEST
+if(q[0]==9){r[1]=0;return 2;}
+if(q[0]==5 && q[2]==1 && q[3]==13 && wd::read32(q+4)==0x05fa0004){
+  mockSoftwareResetWrites++;mockSoftwareResetReads=0;r[1]=1;r[2]=1;return 3;
+}
+if(q[0]==5 && q[2]==4 && q[18]==15){
+  mockSoftwareResetReads++;r[1]=4;r[2]=1;
+  wd::write32(r+3,mockSoftwareResetFails?0:(mockSoftwareResetReads==1?(1UL<<25):0));return 7;
+}
+if(q[0]==5){r[1]=q[2];r[2]=1;return 3;}
+if(q[0]==6){r[1]=q[2];r[2]=q[3];r[3]=1;return 4;}
+if(q[0]==3){DAP_Data.debug_port=0;PORT_OFF();r[1]=0;return 2;}
+#endif
 #ifdef WD_ROLE_FREE_TEST
 if(q[0]==5 && q[2]==1 && q[3]==2){r[1]=mockTargetAttached?1:0;r[2]=mockTargetAttached?1:7;wd::write32(r+3,mockTargetAttached?0x2ba01477:0);return 7;}
 #endif
