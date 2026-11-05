@@ -201,7 +201,7 @@ void ConfigDisk::begin() {
 }
 
 void ConfigDisk::refreshConfigText() {
-  const char* roleStr = (config_.role == 1) ? "ROLE_A" : ((config_.role == 2) ? "ROLE_B" : "AUTO");
+  const char* roleStr = (config_.role == 1) ? "HOST" : ((config_.role == 2) ? "TARGET" : "AUTO");
   memset(configText_, 0, sizeof(configText_));
   configTextLen_ = snprintf(configText_, sizeof(configText_),
     "\xEF\xBB\xBF"
@@ -217,7 +217,7 @@ void ConfigDisk::refreshConfigText() {
     "# 发射功率 (+8, +4, 0, -4, -8, -12, -16, -20 dBm)\r\n"
     "TX_POWER=%d\r\n"
     "\r\n"
-    "# 运行角色 (AUTO: 自动协商, ROLE_A: 角色A主机, ROLE_B: 角色B从机)\r\n"
+    "# 运行角色 (AUTO, HOST, TARGET)\r\n"
     "ROLE=%s\r\n"
     "\r\n"
     "# DAP协议 (2: v2 WinUSB极速, 1: v1 HID兼容)\r\n"
@@ -238,12 +238,24 @@ void ConfigDisk::refreshConfigText() {
 }
 
 void ConfigDisk::refreshStatusText() {
-  const char* rStr = (config_.role == 1) ? "角色A (主机/主动端)" : ((config_.role == 2) ? "角色B (从机/响应端)" : (isLocal_ ? "TARGET (有线直连)" : (isHost_ ? "HOST (自动电脑端)" : "TARGET (自动目标侧)")));
-  if (isLocal_ && config_.role == 0) rStr = "TARGET (有线直连)";
-  const char* lStr = isReady_ ? "已连接 (Connected)" : "等待连接 (Connecting...)";
+  const char* rStr = isHost_ ? "HOST (电脑端)" : "TARGET (目标侧)";
+  if (isLocal_) rStr = "TARGET (有线直连)";
+  bool linkOk = isReady_ || (rssi_ != 0 && (txCount_ > 0 || rxCount_ > 0));
+  const char* lStr = linkOk ? "已连接 (Connected)" : "等待连接 (Connecting...)";
   const char* protoStr = (config_.protocol == 1) ? "CMSIS-DAP v1 (HID 兼容)" : "CMSIS-DAP v2 (WinUSB 极速)";
   float retRate = (txCount_ > 0) ? ((float)retries_ / (txCount_ + 1) * 100.0f) : 0.0f;
   float crcRate = ((rxCount_ + crcErrors_) > 0) ? ((float)crcErrors_ / (rxCount_ + crcErrors_ + 1) * 100.0f) : 0.0f;
+
+  const char* bNeck = "链路空闲";
+  if (airRttAvgUs_ > 0 || e2eAvgUs_ > 0) {
+    if (retRate > 5.0f || crcRate > 3.0f) {
+      bNeck = "2.4G 空间重传较多";
+    } else if (airRttAvgUs_ * 2 > e2eAvgUs_) {
+      bNeck = "空口/SWD耗时为主";
+    } else {
+      bNeck = "USB 1ms 轮询节拍瓶颈";
+    }
+  }
 
   memset(statusText_, 0, sizeof(statusText_));
   int stLen = snprintf(statusText_, sizeof(statusText_),
@@ -258,6 +270,9 @@ void ConfigDisk::refreshStatusText() {
     "TX_POWER: %+d dBm\r\n"
     "RSSI: %d dBm\r\n"
     "PKT_SIZE: %u 字节\r\n"
+    "AIR_RTT: %lu us (Min %lu, Max %lu)\r\n"
+    "E2E_RTT: %.2f ms (Min %lu, Max %lu)\r\n"
+    "BOTTLENECK: %s\r\n"
     "TX_STAT: %lu 包 (重发 %lu 次 / %.1f%%)\r\n"
     "RX_STAT: %lu 包 (错包 %lu 次 / %.1f%%)\r\n"
     "# 说明: 修改 CONFIG.TXT 保存生效。Keil 即插即用！\r\n",
@@ -271,6 +286,9 @@ void ConfigDisk::refreshStatusText() {
     (int)config_.txPower,
     rssi_,
     (unsigned int)pktSize_,
+    (unsigned long)airRttAvgUs_, (unsigned long)airRttMinUs_, (unsigned long)airRttMaxUs_,
+    (float)e2eAvgUs_ / 1000.0f, (unsigned long)e2eMinUs_, (unsigned long)e2eMaxUs_,
+    bNeck,
     (unsigned long)txCount_,
     (unsigned long)retries_,
     retRate,
@@ -292,7 +310,10 @@ void ConfigDisk::refreshStatusText() {
 void ConfigDisk::setTelemetry(int rssi, uint32_t tx, uint32_t retries,
                               uint32_t rx, uint32_t crcErr, bool isHost,
                               bool isLocal, bool isReady, size_t pktSize,
-                              uint32_t afhHops, const uint8_t* hopChs) {
+                              uint32_t afhHops, const uint8_t* hopChs,
+                              uint32_t airRttAvg, uint32_t airRttMin, uint32_t airRttMax,
+                              uint32_t e2eAvg, uint32_t e2eMin, uint32_t e2eMax,
+                              uint32_t swdTime, uint32_t timeouts) {
   rssi_ = rssi;
   txCount_ = tx;
   retries_ = retries;
@@ -306,6 +327,14 @@ void ConfigDisk::setTelemetry(int rssi, uint32_t tx, uint32_t retries,
   if (hopChs) {
     memcpy(hopChannels_, hopChs, 4);
   }
+  airRttAvgUs_ = airRttAvg;
+  airRttMinUs_ = airRttMin;
+  airRttMaxUs_ = airRttMax;
+  e2eAvgUs_ = e2eAvg;
+  e2eMinUs_ = e2eMin;
+  e2eMaxUs_ = e2eMax;
+  swdTimeUs_ = swdTime;
+  timeouts_ = timeouts;
   refreshStatusText();
 }
 
@@ -381,6 +410,17 @@ bool ConfigDisk::handleSectorWrite(uint32_t lba, const uint8_t* buffer, uint32_t
     return true;
   }
 
+  if (bufsize >= 10 && (containsKeyword(buffer, bufsize, "BOOTLOADER", 10) || containsKeyword(buffer, bufsize, "bootloader", 10))) {
+    bootloaderPending_ = true;
+    rebootPending_ = true;
+#if !defined(HOST_TEST)
+    rebootAt_ = millis() + 1000; /* 留出1000ms让上位机完全退出并释放文件句柄 */
+#else
+    rebootAt_ = 400;
+#endif
+    return true;
+  }
+
   if (lba == 8 || (bufsize >= 16 && (containsKeyword(buffer, bufsize, "PAIR_CODE", 9) || containsKeyword(buffer, bufsize, "pair_code", 9)))) {
     memcpy(configSector_, buffer, bufsize);
     writeDirty_ = true;
@@ -409,6 +449,16 @@ static bool iequals(const char* a, const char* b) {
 bool ConfigDisk::handleFlush() {
   // Check Sector 8 (CONFIG.TXT)
   const char* src = (const char*)configSector_;
+  if (strstr(src, "BOOTLOADER") != nullptr || strstr(src, "bootloader") != nullptr) {
+    bootloaderPending_ = true;
+    rebootPending_ = true;
+#if !defined(HOST_TEST)
+    rebootAt_ = millis() + 1000; /* 留出1000ms让上位机完全退出并释放文件句柄 */
+#else
+    rebootAt_ = 400;
+#endif
+    return true;
+  }
   bool hasKey = (strstr(src, "PAIR_CODE") != nullptr || strstr(src, "pair_code") != nullptr);
 
   if (!writeDirty_ && !hasKey) {
@@ -464,8 +514,8 @@ bool ConfigDisk::handleFlush() {
       }
     } else if (iequals(key, "ROLE")) {
       uint8_t r = 0;
-      if (iequals(val, "ROLE_A") || iequals(val, "A") || iequals(val, "HOST") || iequals(val, "1")) r = 1;
-      else if (iequals(val, "ROLE_B") || iequals(val, "B") || iequals(val, "TARGET") || iequals(val, "2")) r = 2;
+      if (iequals(val, "HOST")) r = 1;
+      else if (iequals(val, "TARGET")) r = 2;
       else r = 0;
       if (r != newCfg.role) { newCfg.role = r; modified = true; }
     } else if (iequals(key, "PROTOCOL")) {

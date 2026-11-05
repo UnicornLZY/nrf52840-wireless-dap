@@ -28,6 +28,7 @@ public:
   uint16_t mtu() const{return wd::RadioPayload;}
   uint32_t bootId() const{return bootId_;}
   const Stats& stats() const{return stats_;}
+  void resetStats(){stats_ = Stats{};}
   void setPairCode(uint32_t code){pairCode_=code;}
   void setChannel(uint8_t ch){channel_=ch;updateHopChannels();}
   void setTxPower(int8_t power){txPower_=power;}

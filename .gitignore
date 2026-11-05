@@ -2,6 +2,7 @@
 /test-build/
 /firmware/*.uf2
 !firmware/uart_latency_packet240_unified_v3_p113_2m_fast_ch80_afh_v2.uf2
+!firmware/无线DAPLink_一键Bootloader_瓶颈诊断_AFH_R11.uf2
 *.exe
 !tools/DAPLINK.exe
 *.elf

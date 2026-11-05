@@ -234,7 +234,49 @@ struct DapUsbEndpoint {
 };
 static DapUsbEndpoint dapEndpoint;
 static EsbTransport transport;
-struct DapSlot {uint8_t request[DapPacketSize],response[DapPacketSize];uint16_t seq;uint32_t sentAt;uint8_t responseLen;bool remote,ready;};
+struct LiveDapProfiler {
+  uint32_t count = 0;
+  uint32_t airRttTotalUs = 0;
+  uint32_t airRttMinUs = 0xFFFFFFFF;
+  uint32_t airRttMaxUs = 0;
+  uint32_t e2eTotalUs = 0;
+  uint32_t e2eMinUs = 0xFFFFFFFF;
+  uint32_t e2eMaxUs = 0;
+  uint32_t lastAirRttUs = 0;
+  uint32_t lastE2eUs = 0;
+  uint32_t lastSwdUs = 0;
+
+  void recordAir(uint32_t us) {
+    if (us > 500000) return;
+    count++;
+    airRttTotalUs += us;
+    if (us < airRttMinUs) airRttMinUs = us;
+    if (us > airRttMaxUs) airRttMaxUs = us;
+    lastAirRttUs = us;
+  }
+
+  void recordE2e(uint32_t us) {
+    if (us > 1000000) return;
+    e2eTotalUs += us;
+    if (us < e2eMinUs) e2eMinUs = us;
+    if (us > e2eMaxUs) e2eMaxUs = us;
+    lastE2eUs = us;
+  }
+
+  uint32_t avgAir() const { return count ? (airRttTotalUs / count) : 0; }
+  uint32_t avgE2e() const { return count ? (e2eTotalUs / count) : 0; }
+  void reset() { count = 0; airRttTotalUs = 0; airRttMinUs = 0xFFFFFFFF; airRttMaxUs = 0; e2eTotalUs = 0; e2eMinUs = 0xFFFFFFFF; e2eMaxUs = 0; lastAirRttUs = 0; lastE2eUs = 0; lastSwdUs = 0; }
+};
+static LiveDapProfiler liveProfiler;
+
+struct DapSlot {
+  uint8_t request[DapPacketSize], response[DapPacketSize];
+  uint16_t seq;
+  uint32_t sentAt;
+  uint8_t responseLen;
+  bool remote, ready;
+  uint32_t rxUs, rfSentUs;
+};
 static DapSlot dapSlots[DapWindow];
 static uint8_t dapHead=0,dapCount=0;
 static bool debugConnected=false;
@@ -544,10 +586,12 @@ static void dapWorker(void*) {
         }
       }
       dapStartedAt=millis();dapRunning=true;
+      uint32_t swdTimingStartUs = micros();
 #if WD_PROFILE
-      uint32_t commandStartedUs=micros();
+      uint32_t commandStartedUs=swdTimingStartUs;
 #endif
       uint32_t n=DAP_ProcessCommand(job.data,result.data)&0xffff;
+      liveProfiler.lastSwdUs = micros() - swdTimingStartUs;
 #if WD_RUN_KICK
       if(runKick.observe(job.data,result.data)){
         // Keil's RAM flash algorithm writes this exact idempotent DHCSR value
@@ -657,6 +701,7 @@ if(hostMode){
     if(f.len >= 5) {
       if(read32(f.data+1) != configDisk.config().pairCode) return;
     }
+    if(!ready) transport.resetStats();
     ready=true;lastPeer=millis();
 #if WD_LINK_RECOVERY_TEST
     wirelessHostSeen=true;
@@ -720,6 +765,10 @@ if(hostMode){
           DapSlot& s=dapSlots[(dapHead+i)%DapWindow];
           if(s.remote && !s.ready && s.seq==f.seq){
             if(!validDapResponse(s.request,f.data,f.len)){invalidFrames++;disconnectLink();return;}
+            uint32_t nowUs = micros();
+            if(s.rfSentUs && nowUs >= s.rfSentUs){
+              liveProfiler.recordAir(nowUs - s.rfSentUs);
+            }
             memset(s.response,0,DapPacketSize);memcpy(s.response,f.data,f.len);s.responseLen=(uint8_t)f.len;s.ready=true;
             if(s.request[0]==0x05 || s.request[0]==0x06 || s.request[0]==0x12 || s.request[0]==0x11 || s.request[0]==0x04 || s.request[0]==0x02 || s.request[0]==0x0a){
               lastBurnActivityAt=millis();
@@ -765,8 +814,6 @@ static void resetLinkState() {
   uartSeq=lastUartSeq=0;lastUartBatch=lastUartTransmit=millis();
   lastPeer=startedAt=millis();lastHello=lastPing=0;tuning=0;
 if(hostMode){
-  // All requests already accepted before this boundary belong to the failed
-  // session. Return errors in FIFO order instead of replaying them on a new A.
   hostCancelledRequests=uxQueueMessagesWaiting(usbRequests)+
     ((usbPacketHead-usbPacketTail)&(UsbPacketCount-1));
   debugConnected=false;
@@ -1214,7 +1261,13 @@ if(!hostMode){
   now=now && !localMode;
 }
 #endif
-  if(generation!=seenGeneration || now!=wasConnected){seenGeneration=generation;wasConnected=now;resetLinkState();}
+  if(generation!=seenGeneration || now!=wasConnected){
+    if(!wasConnected && now){
+      transport.resetStats();
+      liveProfiler.reset();
+    }
+    seenGeneration=generation;wasConnected=now;resetLinkState();
+  }
   uint32_t ms=millis();
   while(usbPacketTail!=usbPacketHead){
     uint8_t tail=usbPacketTail;
@@ -1349,11 +1402,16 @@ if(hostMode && !localMode){
        sendDapUsbPacket(dapEndpoint,dapSlots[dapHead].response,dapSlots[dapHead].responseLen)){
       if(dapSlots[dapHead].request[0]!=0x80)
         recordDap(1,dapSlots[dapHead].response,dapSlots[dapHead].responseLen);
+      uint32_t nowUs = micros();
+      if(dapSlots[dapHead].rxUs && nowUs >= dapSlots[dapHead].rxUs){
+        liveProfiler.recordE2e(nowUs - dapSlots[dapHead].rxUs);
+      }
       dapHead=(dapHead+1)%DapWindow;dapCount--;
     }
     while(dapCount<DapWindow){
       uint8_t raw[DapPacketSize];if(xQueueReceive(usbRequests,raw,0)!=pdTRUE)break;
       DapSlot& s=dapSlots[(dapHead+dapCount)%DapWindow];s={};memcpy(s.request,raw,DapPacketSize);dapCount++;
+      s.rxUs = micros();
       if(raw[0]!=0x80)recordDap(0,raw,DapPacketSize);
       bool cancelled=hostCancelledRequests!=0;
       if(cancelled)hostCancelledRequests--;
@@ -1380,6 +1438,7 @@ if(hostMode && !localMode){
 #if WD_COMPACT_WIRE_TEST
         requestLength=dapWireRequestLength(raw,DapPacketSize);
 #endif
+        s.rfSentUs = micros();
         if(!queueFrame(DapRequest,s.seq,raw,requestLength)){dapError(raw[0],s.response);s.responseLen=dapErrorLength(s.request[0]);s.ready=true;}
       }
     }
@@ -1421,10 +1480,10 @@ if(hostMode && !localMode){
   bool indicatedReady=false;
 if(hostMode){
   if(!localMode)pumpTransmit();
-  indicatedReady=localMode || ready;
+  indicatedReady=localMode || ready || transport.connected() || (transport.stats().rssi != 0 && (transport.stats().tx > 0 || transport.stats().received > 0));
 } else {
   if(!localMode)pumpTransmit();
-  indicatedReady=localMode || ready;
+  indicatedReady=localMode || ready || transport.connected() || (transport.stats().rssi != 0 && (transport.stats().tx > 0 || transport.stats().received > 0));
 }
   bool isBurning = (lastBurnActivityAt != 0) && (uint32_t(ms - lastBurnActivityAt) < 200);
   if(!indicatedReady){
@@ -1440,27 +1499,38 @@ if(hostMode){
   static uint32_t lastTelemetryAt = 0;
   if(uint32_t(ms) - lastTelemetryAt >= 250) {
     lastTelemetryAt = uint32_t(ms);
-    int rssiVal = (int)transport.stats().rssi;
+    int rssiVal = transport.connected() ? (int)transport.stats().rssi : 0;
     configDisk.setTelemetry(
       rssiVal ? (rssiVal > 0 ? -rssiVal : rssiVal) : 0,
       transport.stats().tx,
       transport.stats().retries,
       transport.stats().received,
       transport.stats().crcErrors,
-      hostMode, localMode, ready,
+      hostMode, localMode, indicatedReady,
       DapPacketSize,
       transport.hopCount(),
-      transport.hopChannels()
+      transport.hopChannels(),
+      liveProfiler.avgAir(),
+      liveProfiler.airRttMinUs == 0xFFFFFFFF ? 0 : liveProfiler.airRttMinUs,
+      liveProfiler.airRttMaxUs,
+      liveProfiler.avgE2e(),
+      liveProfiler.e2eMinUs == 0xFFFFFFFF ? 0 : liveProfiler.e2eMinUs,
+      liveProfiler.e2eMaxUs,
+      liveProfiler.lastSwdUs,
+      transport.stats().timeouts
     );
   }
   if(configDisk.isFlashPending()){
     configDisk.commitToFlash();
   }
   if(configDisk.isRebootPending() && uint32_t(ms)>=configDisk.rebootAt()){
-    configDisk.clearReboot();
 #if !defined(HOST_TEST)
+    if(configDisk.isBootloaderPending()){
+      NRF_POWER->GPREGRET = 0x57; // DFU_MAGIC_UF2_RESET
+    }
     NVIC_SystemReset();
 #endif
+    configDisk.clearReboot();
   }
   taskYIELD();
 }

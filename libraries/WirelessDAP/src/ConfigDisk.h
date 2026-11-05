@@ -15,7 +15,7 @@ struct DeviceConfig {
   uint32_t pairCode;   // Default: 123456
   uint8_t  channel;    // Default: 80
   int8_t   txPower;    // Default: +8
-  uint8_t  role;       // 0: AUTO, 1: ROLE_A (主机/主动发起端), 2: ROLE_B (从机/被动响应端)
+  uint8_t  role;       // 0: AUTO, 1: HOST, 2: TARGET
   uint8_t  protocol;   // 0 or 2: CMSIS-DAP v2 (WinUSB), 1: CMSIS-DAP v1 (HID)
   uint32_t crc;
 };
@@ -31,11 +31,15 @@ public:
 
   void setTelemetry(int rssi, uint32_t tx, uint32_t retries, uint32_t rx,
                     uint32_t crcErrors, bool isHost, bool isLocal, bool isReady,
-                    size_t pktSize, uint32_t afhHops = 0, const uint8_t* hopChs = nullptr);
+                    size_t pktSize, uint32_t afhHops = 0, const uint8_t* hopChs = nullptr,
+                    uint32_t airRttAvg = 0, uint32_t airRttMin = 0, uint32_t airRttMax = 0,
+                    uint32_t e2eAvg = 0, uint32_t e2eMin = 0, uint32_t e2eMax = 0,
+                    uint32_t swdTime = 0, uint32_t timeouts = 0);
 
   bool isRebootPending() const { return rebootPending_; }
+  bool isBootloaderPending() const { return bootloaderPending_; }
   uint32_t rebootAt() const { return rebootAt_; }
-  void clearReboot() { rebootPending_ = false; }
+  void clearReboot() { rebootPending_ = false; bootloaderPending_ = false; }
 
   bool isFlashPending() const { return flashPending_; }
   void commitToFlash();
@@ -56,6 +60,7 @@ private:
   DeviceConfig config_{};
   Adafruit_USBD_MSC usbMsc_;
   bool rebootPending_ = false;
+  bool bootloaderPending_ = false;
   uint32_t rebootAt_ = 0;
   bool flashPending_ = false;
 
@@ -71,6 +76,14 @@ private:
   size_t pktSize_ = 240;
   uint32_t afhHops_ = 0;
   uint8_t hopChannels_[4] = {80, 19, 40, 60};
+  uint32_t airRttAvgUs_ = 0;
+  uint32_t airRttMinUs_ = 0;
+  uint32_t airRttMaxUs_ = 0;
+  uint32_t e2eAvgUs_ = 0;
+  uint32_t e2eMinUs_ = 0;
+  uint32_t e2eMaxUs_ = 0;
+  uint32_t swdTimeUs_ = 0;
+  uint32_t timeouts_ = 0;
 
   // File text buffers
   char configText_[512]={};

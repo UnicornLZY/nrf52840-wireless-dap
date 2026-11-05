@@ -1,8 +1,8 @@
-# nRF52840 Wireless CMSIS-DAP v2 + CDC UART (v4.4 稳定版)
+# nRF52840 Wireless CMSIS-DAP v2 + CDC UART (v5.0 稳定版 · R11)
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Unit Tests](https://img.shields.io/badge/Tests-13%2F13%20PASS-brightgreen.svg)](tests/)
-[![Firmware](https://img.shields.io/badge/UF2-v4.4%20Ultra240B-orange.svg)](firmware/)
+[![Firmware](https://img.shields.io/badge/UF2-v5.0%20R11-orange.svg)](firmware/)
 
 使用两块 SuperMini / nice!nano 兼容的 **Nordic nRF52840** 开发板，基于 Nordic 2.4 GHz 高速私有射频链路（Nordic ESB / RADIO 2 Mbps）实现的**低延迟无线 CMSIS-DAP v2（SWD 烧录与调试）**和**全双工无线虚拟串口（CDC ACM UART）**。
 
@@ -14,6 +14,9 @@
 
 ## 🌟 核心特性与技术亮点 (v4.3)
 
+* ⚡ **一键进入 Bootloader (免按键升级)**：内置图形配置工具 `DAPLINK.exe` 新增专属【⚡ 一键进入 Bootloader】按钮；亦可在虚拟磁盘直接向 `CONFIG.TXT` 写入 `BOOTLOADER`。探针自动向寄存器写入 `0x57`（`DFU_MAGIC_UF2_RESET`）并软复位，直接弹出 `NICENANO`/`NRF52BOOT` 固件盘，彻底告别频繁拆外壳双击硬件 RST 按键！
+* 🔬 **实时无线遥测与链路瓶颈诊断**：虚拟 U 盘 `STATUS.TXT` 与图形上位机实时更新端到端时延（E2E RTT）、空口往返耗时（Air RTT）、重发率、CRC 统计与自适应瓶颈诊断，通信状态一目了然。
+* 🛡️ **稳固的 Keil 会话重置自愈机制**：基于 R4 验证的会话重置状态机（`WD_SESSION_RESTART_TEST`），在 Keil 烧录结束断开会话或通信重连时排空并重置 WinUSB 管道，杜绝二次烧录偶发掉线问题。
 * 🚀 **Ultra 240B 大包吞吐**：单次空口承载 240 字节大包，相比传统 64B HID 调试器，空中 RTT 交互轮次大幅削减近 70%，Flash 连续烧录速度成倍提升。
 * ⚡ **CMSIS-DAP v2 原生 WinUSB Bulk**：基于 Windows 原生 WinUSB 驱动免驱直连，消除标准 HID 的 1ms 轮询延迟，全面释放 12Mbps USB 全速与 ESB 2Mbps 潜能；同时支持随时一键切换为 CMSIS-DAP v1 (HID) 兼容老旧 IDE。
 * 📡 **AFH 智能自适应跳频 (Adaptive Frequency Hopping)**：
