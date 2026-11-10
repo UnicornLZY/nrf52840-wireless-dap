@@ -3,6 +3,8 @@
 /firmware/*.uf2
 !firmware/uart_latency_packet240_unified_v3_p113_2m_fast_ch80_afh_v2.uf2
 !firmware/无线DAPLink_一键Bootloader_瓶颈诊断_AFH_R11.uf2
+!firmware/无线DAPLink_AFH_固定角色与充电识别_R4.uf2
+!firmware/wireless_daplink_afh_v6.0.0.uf2
 *.exe
 !tools/DAPLINK.exe
 *.elf

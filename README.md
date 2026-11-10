@@ -1,8 +1,8 @@
-# nRF52840 Wireless CMSIS-DAP v2 + CDC UART (v5.0 稳定版 · R11)
+# nRF52840 Wireless CMSIS-DAP v2 + CDC UART (v6.0 稳定版)
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Unit Tests](https://img.shields.io/badge/Tests-13%2F13%20PASS-brightgreen.svg)](tests/)
-[![Firmware](https://img.shields.io/badge/UF2-v5.0%20R11-orange.svg)](firmware/)
+[![Firmware](https://img.shields.io/badge/UF2-v6.0%20Stable-orange.svg)](firmware/)
 
 使用两块 SuperMini / nice!nano 兼容的 **Nordic nRF52840** 开发板，基于 Nordic 2.4 GHz 高速私有射频链路（Nordic ESB / RADIO 2 Mbps）实现的**低延迟无线 CMSIS-DAP v2（SWD 烧录与调试）**和**全双工无线虚拟串口（CDC ACM UART）**。
 
