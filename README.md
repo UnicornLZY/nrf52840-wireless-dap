@@ -1,132 +1,128 @@
-# nRF52840 Wireless CMSIS-DAP v2 + CDC UART (v6.0 稳定版)
+# nRF52840 Wireless CMSIS-DAP v2 + CDC UART (`v7.1.0`)
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Unit Tests](https://img.shields.io/badge/Tests-13%2F13%20PASS-brightgreen.svg)](tests/)
-[![Firmware](https://img.shields.io/badge/UF2-v6.0%20Stable-orange.svg)](firmware/)
+[![Firmware](https://img.shields.io/badge/UF2-v7.1.0%20Stable-orange.svg)](firmware/)
 
-使用两块 SuperMini / nice!nano 兼容的 **Nordic nRF52840** 开发板，基于 Nordic 2.4 GHz 高速私有射频链路（Nordic ESB / RADIO 2 Mbps）实现的**低延迟无线 CMSIS-DAP v2（SWD 烧录与调试）**和**全双工无线虚拟串口（CDC ACM UART）**。
+使用两块 SuperMini / ProMicro（nice!nano 兼容）**Nordic nRF52840** 开发板实现的**对等有线 / 无线二合一 CMSIS-DAP v2.1.2 调试器**与**全双工无线虚拟串口（CDC ACM UART）**。
 
-两块开发板刷入**完全相同的单固件**即可自动识别角色，无需烧录器，无需繁琐配对，真正即插即用！
-
-> This project implements a high-performance wireless CMSIS-DAP v2 (WinUSB Bulk) probe and bidirectional CDC UART bridge on Nordic nRF52840 using a proprietary 2.4 GHz ESB 2 Mbps RF link. Both boards run the exact same unified firmware and automatically negotiate Host/Target roles.
+两块开发板刷入**完全相同的单固件**即可自动协商主从角色；单板直连电脑与目标板时自动走有线高速 `SPIM3` 模式，双板无线配对后走 2.4 GHz 私有低延迟流水线，真正即插即用。
 
 ---
 
-## 🌟 核心特性与技术亮点 (v4.3)
+## 🌟 核心特性与技术亮点 (`v7.1.0`)
 
-* ⚡ **一键进入 Bootloader (免按键升级)**：内置图形配置工具 `DAPLINK.exe` 新增专属【⚡ 一键进入 Bootloader】按钮；亦可在虚拟磁盘直接向 `CONFIG.TXT` 写入 `BOOTLOADER`。探针自动向寄存器写入 `0x57`（`DFU_MAGIC_UF2_RESET`）并软复位，直接弹出 `NICENANO`/`NRF52BOOT` 固件盘，彻底告别频繁拆外壳双击硬件 RST 按键！
-* 🔬 **实时无线遥测与链路瓶颈诊断**：虚拟 U 盘 `STATUS.TXT` 与图形上位机实时更新端到端时延（E2E RTT）、空口往返耗时（Air RTT）、重发率、CRC 统计与自适应瓶颈诊断，通信状态一目了然。
-* 🛡️ **稳固的 Keil 会话重置自愈机制**：基于 R4 验证的会话重置状态机（`WD_SESSION_RESTART_TEST`），在 Keil 烧录结束断开会话或通信重连时排空并重置 WinUSB 管道，杜绝二次烧录偶发掉线问题。
-* 🚀 **Ultra 240B 大包吞吐**：单次空口承载 240 字节大包，相比传统 64B HID 调试器，空中 RTT 交互轮次大幅削减近 70%，Flash 连续烧录速度成倍提升。
-* ⚡ **CMSIS-DAP v2 原生 WinUSB Bulk**：基于 Windows 原生 WinUSB 驱动免驱直连，消除标准 HID 的 1ms 轮询延迟，全面释放 12Mbps USB 全速与 ESB 2Mbps 潜能；同时支持随时一键切换为 CMSIS-DAP v1 (HID) 兼容老旧 IDE。
-* 📡 **AFH 智能自适应跳频 (Adaptive Frequency Hopping)**：
-  内置空口丢包监控与多频点快速自愈机制。当遭遇复杂 2.4GHz Wi-Fi / 蓝牙同频强干扰导致丢包重发时，主从双机自动在基准频点（默认 CH80 / 2480MHz）与伪随机正交备用信道间毫秒级静默跳转，彻底杜绝 Keil `RDDI-DAP Error` 中断。
-* 💾 **免驱虚拟配置磁盘 (ConfigDisk 1MB VFS)**：
-  电脑端（主机）插入 USB 即自动挂载 1MB 虚拟 U 盘，无需安装任何专用上位机驱动：
-  - `CONFIG.TXT`：文本化配置配对码（PairCode）、射频信道（Channel）、发射功率（TxPower）、协议版本（Protocol: 1=v1 HID, 2=v2 Bulk）、AFH 跳频开关。直接记事本修改保存即生效。
-  - `STATUS.TXT`：实时链路状态遥测，包含无线连接状态、当前活跃信道、AFH 触发计数、空口往返 RTT 延时等。
-  - `DAPLINK.exe`：内置 30KB 原生 Windows GUI 配置工具（纯 Win32 API 编写，零依赖，秒开），双击即可可视化读取与保存参数。
-* 💡 **三段式智能 LED 状态机**：
-  - **慢闪 (1 Hz)**：无线搜索配对中（未建立连接）。
-  - **常亮 (Solid ON)**：无线链路已锁定就绪（Idle Connected）。
-  - **快闪 (10 Hz 爆闪)**：SWD 烧录活跃 / 批量数据传输中。
-* 🔄 **单固件自由角色 + 数据线/充电线智能识别**：
-  - 双板共用一份 UF2 固件，硬件上电自动检测：接目标 MCU 的板自动成为**目标从机（A 端）**；接电脑 USB 且未接目标的板自动成为**电脑主机（B 端）**。
-  - **充电线/数据线智能识别**：从机插充电头或充电宝供电（仅供电无 USB 数据枚举）不抢占本地模式，保持无线连接；插电脑且完成 USB 枚举时无缝切换为有线直连调试器，拔掉数据线即秒回无线模式。
-* ⚡ **P1.13 烧录完成强制硬件复位**：
-  - 在 DAP 会话批量写入 Flash 结束并收到 `DAP_Disconnect` 时，目标端自动向 `P1.13` 输出 20ms 开漏硬件复位低脉冲后释放。
-  - 完美解决 Keil 未勾选 `Reset and Run` 或部分 MCU 需要物理硬件复位线的场景；若不接 `P1.13`，依然保留原有 4 线 SWD 软件复位机制，双向完全兼容。
-* 📟 **低延迟全双工无线串口 (CDC UART)**：
-  默认 `115200 8N1`，支持 `1200` ~ `1000000` 常用波特率及 `8N1/8N2/8E1/8E2` 参数同步，支持 1 ms 短帧合包与智能重传。
+* **左高速射频隔离排针（`LEFT_HS` 默认主力 + `RIGHT_LP` 兼容切换）**：将全部 SWD / UART 高频信号迁出射频与晶振耦合区，实测无线烧录 480 KB 固件 **26,262 帧 `0.00%` 空口重传、零失败**；同时支持通过 `WirelessDAP_Tool.exe` 或 `CONFIG.TXT` 热切换为老版右排针（`RIGHT_LP`）。
+* **无线吞吐全面领先**：`240B` 净荷 × `6` 槽位无线空口流水线，在 `STM32F411CEUx`（`@5MHz` SWD）实测 64KB SRAM 写入 **`96.85 KB/s`**、读取 **`85.11 KB/s`**、480KB 校验 **`84.84 KB/s`**、480KB 整片烧录 **`34.762s`**。
+* **有线硬件 `SPIM3` 加速 + `SWD_10M` 双策略可选（`8M` 默认 / `16M` 超频）**：有线 `1024B × 8` 流式封包；Keil 选择 `10MHz` 时默认跑 `8MHz` 稳态（兼顾长线与扩展板，480KB 综合速率达 `16MHz` 的 `95.1%`），也可一键切至 `16MHz` 超频（SRAM 读取 **`228.50 KB/s`**、480KB 校验 **`231.75 KB/s`**、整片耗时 **`19.857s`**）。
+* **无线全双工串口 32KB 流控 + USB `NAK` 硬背压零丢包**：实测 **`2400 ~ 1,000,000 bps`**（14 档）双向零误码；`64KB @1M` 无流控死灌下行 **`76.50 KB/s`** / 上行 **`67.47 KB/s`**（USB-USB 下行 `86.59` / 上行 `69.91 KB/s`，峰值 `118.27 KB/s`），45 秒 `@460800 + SWD` 高负载混合烤机 **23,116 帧（1.48 MB）零坏包、零缺口、RF 零重传**。
+* **`RF_PHY` 双速率自适应（`AUTO` / `1M` / `2M`）+ `AFH` 自适应跳频**：`AUTO` 模式近距使用 `2 Mbps` 满速传输，弱信号自动降速 `1 Mbps` 抗衰减；遭遇同频干扰时支持信道扫描与自动跳频。
+* **免接 `NRST` 兼容 `Reset and Run`**：即使未接硬件复位线，也可自动识别 Keil 下载结束脉冲序列并触发 4 线 SWD `SYSRESETREQ`。
+* **免驱即用 + 独立遥测控制台 [`WirelessDAP_Tool.exe`](tools/WirelessDAP_Tool.exe)**：内置 MS OS 2.0 描述符（Windows 10/11 免驱）；虚拟 U 盘 `DAPCFG` 内含 `CONFIG.TXT`（双槽位 Flash 持久化）与免安装 GUI 工具，支持实时遥测、频谱扫描、对频同步及**一键进入 Bootloader**（亦支持串口 `1200 bps` 维持 `>= 60 ms` 自动进入 Bootloader）。
 
 ---
 
 ## 🔌 硬件引脚定义与接线
 
-![nRF52840 引脚定义图](docs/images/pinout.png)
+### 主力推荐：`LEFT_HS`（左侧高速射频隔离排针，默认）
 
-### 单排直连推荐引脚（目标从机 A 端）
+![左高速引脚分配接线图](docs/images/left_hs_wiring.jpg)
 
-| nRF52840 引脚 | 目标 MCU 引脚 | 功能说明 |
-|:---|:---|:---|
-| **`P0.31`** | **`SWCLK`** | SWD 硬件时钟输出（内部限幅 4 MHz） |
-| **`P0.29`** | **`SWDIO`** | SWD 双向数据线 |
-| **`GND`** | **`GND`** | **必须共地** |
-| **`P0.02`** | **`UART RX`** | 探针 TX -> 接目标板 RX（需要串口时连接） |
-| **`P1.15`** | **`UART TX`** | 探针 RX <- 接目标板 TX（需要串口时连接） |
-| **`P1.13`** | **`nRESET`** | 目标硬件开漏复位（可选；连接后在烧录完成自动拉低 20ms 硬件复位；不接走 SWD 软件复位） |
+| 信号 | nRF52840 引脚 | 丝印参考 | 目标单片机连接 | 说明 |
+| :--- | :---: | :---: | :--- | :--- |
+| **`GND`** | `GND` | 左侧 `B-` / `GND` | **`GND`** | **必须共地** |
+| **`SWCLK`** | **`P0.17`** | 左侧 `017`（`D2`） | **`SWCLK`** | `SPIM3` 高速时钟（有线支持 8M / 16M） |
+| **`SWDIO`** | **`P0.20`** | 左侧 `020`（`D3`） | **`SWDIO`** | SWD 双向数据线（内部上拉） |
+| **`UART TX`** | **`P0.22`** | 左侧 `022`（`D4`） | **`UART RX`** | 探针发送 -> 接目标板 `RX` |
+| **`UART RX`** | **`P0.24`** | 左侧 `024`（`D5`） | **`UART TX`** | 探针接收 <- 接目标板 `TX` |
+| **`NRST`** | **`P1.00`** | 左侧 `100`（`D6`） | **`nRESET`**（可选） | 开漏硬件复位；不接亦支持 SWD 软复位 |
+| **`3.3V`** | `VCC` | 右侧 `VCC` | `3.3V` | 仅在目标板无独立供电时对外/反向取电 |
 
-> **⚠️ 接线与供电避坑指南**：
-> 1. **供电电平**：所有 GPIO 为 **3.3V 电平**，严禁直连 5V 单片机引脚。
-> 2. **A 端供电方式**：支持通过 `3.3V`、`BAT` 引脚或 **Type-C 接口插充电头/充电宝供电**。新版本已加入智能枚举识别，仅供电不枚举不会误切本地有线模式，保持稳定无线连接；若需本地有线烧录，直接使用数据线插电脑即可。
-> 3. **板载 `RST` 孔位说明**：夹在右侧 `GND` 和 `3.3V` 之间的 `RST` 是 nRF52840 芯片自身的复位口，不是目标的复位口！若使用排线，可在该孔插一根空杜邦线头占位防止错位。
+> **备用兼容方案 `RIGHT_LP`**：沿用旧版右侧引脚（`SWCLK=P0.31`、`SWDIO=P0.29`、`UART_TX=P0.02`、`UART_RX=P1.15`、`NRST=P1.13`）的用户，可在 [`WirelessDAP_Tool.exe`](tools/WirelessDAP_Tool.exe) 或 `CONFIG.TXT` 中设置 `PIN_MODE=RIGHT_LP` 直接兼容（详图见 [docs/USAGE.md](docs/USAGE.md)）。
+>
+> **⚠️ 接线与供电提醒**：所有 GPIO 均为 **3.3V 电平**，严禁直连 5V 信号；右侧 `GND` 与 `VCC` 之间的 `RST` 为 nRF52840 芯片自身复位脚，勿接目标板复位线。
+
+---
+
+## 📊 实测性能对比（`STM32F411CEUx` · 零校验错误）
+
+完整原始数据与无线串口压测记录见 [docs/DAPLink_Wired_Wireless_Benchmark_v7.1.0.xlsx](docs/DAPLink_Wired_Wireless_Benchmark_v7.1.0.xlsx)：
+
+### 1. 无线调试实测对比（`@5MHz` SWD，近距离无遮挡）
+
+| 测试指标 | Horco 无线成品 | 自研 `LEFT_HS`（主力） | 自研 `RIGHT_LP`（备用） |
+| :--- | :---: | :---: | :---: |
+| 64KB SRAM 写入 | `73.87 KB/s` | **`96.85 KB/s`**（`+31.1%`） | `38.35 KB/s` |
+| 64KB SRAM 读取 | `76.23 KB/s` | **`85.11 KB/s`**（`+11.6%`） | `37.55 KB/s` |
+| 480KB 大固件校验 | `71.02 KB/s` | **`84.84 KB/s`**（`+19.5%`） | `38.07 KB/s` |
+| 480KB 整片总耗时 / 综合速率 | `33.283 s`（`14.42 KB/s`） | `34.762 s`（`13.81 KB/s`） | `49.268 s`（`9.74 KB/s`） |
+| 480KB 空口重传率 | — | **`0.00%`**（26,262 帧零重传） | `20.71%` |
+
+### 2. 有线直连实测对比（`LEFT_HS` · `SPIM3` + `1024B × 8`）
+
+| 测试指标 | `5 MHz` | `10M → 8MHz`（默认稳态） | `10M → 16MHz`（超频） |
+| :--- | :---: | :---: | :---: |
+| 64KB SRAM 写入 | `131.29 KB/s` | `173.54 KB/s` | **`202.54 KB/s`** |
+| 64KB SRAM 读取 | `146.39 KB/s` | `196.86 KB/s` | **`228.50 KB/s`** |
+| 480KB 大固件校验 | `144.14 KB/s` | `196.02 KB/s` | **`231.75 KB/s`** |
+| 480KB 整片总耗时 / 综合速率 | `23.027 s`（`20.84 KB/s`） | `20.883 s`（`22.99 KB/s`） | **`19.857 s`（`24.17 KB/s`**） |
+
+### 3. 无线全双工串口与稳定性烤机
+* **波特率全覆盖**：`2400 ~ 1,000,000 bps` 14 档双向零误码全量通过。
+* **64KB 死灌与背压**：`@1M` 实机死灌上行 **`67.47 KB/s`** / 下行 **`76.50 KB/s`**（`115200` 下 `64KB` 背压 `10.98 KB/s` 零丢包）。
+* **45s 高负载混合烤机**：`@460800` 连续流 + 16 轮 16KB SWD 并发，实收 23,116 帧 / 1.48 MB，**0 坏包、0 缺口、RF 0 重传**；实车 512KB 固件 `9.536s` 还原并通过 `SHA-256` 校验。
 
 ---
 
 ## 🚀 极速上手：拖拽刷入固件 (UF2)
 
-本项目已提供硬件实测验证的最新稳定版 UF2 固件在 [`firmware/`](firmware/) 目录中：
-
-* **固件文件**：[`firmware/uart_latency_packet240_unified_v3_p113_2m_fast_ch80_afh_v2.uf2`](firmware/uart_latency_packet240_unified_v3_p113_2m_fast_ch80_afh_v2.uf2)
-* **SHA-256**：`0E18352C8134C9156C4E17B8434F618E2A2356773403EB95D4BCFEA31BFE3C6A`
+* **最新稳定版固件**：[`firmware/wireless_daplink_v7.1.0_hs_pins.uf2`](firmware/wireless_daplink_v7.1.0_hs_pins.uf2)（`540,160 bytes`）
+* **SHA-256**：`00D69192234DC57CEF55F2A0B8B0365F9FC14F029E3C3FB0112684A50A26E2ED`
 
 ### 刷录步骤：
 1. 用 USB 数据线将 nRF52840 开发板连接至电脑。
-2. **0.5 秒内双击开发板上的 `RST` 按钮**（无按键的可快速短接两次 `RST` 到 `GND`）。
-3. 电脑会弹出一个名为 `NICENANO` 或 `NRF52BOOT` 的可移动磁盘。
-4. 将上述 `.uf2` 文件拖入该磁盘，开发板会自动烧写并重启。
-5. **两块开发板均按此步骤刷入同一份固件即可！**
+2. **0.5 秒内快速短接两次 `RST` 与 `GND`**（或双击板载 `RST` 按键），弹出 `NICENANO` 或 `NRF52BOOT` 磁盘。
+3. 将 `wireless_daplink_v7.1.0_hs_pins.uf2` 拖入该磁盘，等待自动烧写并重启。
+4. **两块开发板请刷入同一版本固件**，并搭配 [`tools/WirelessDAP_Tool.exe`](tools/WirelessDAP_Tool.exe) 配置使用。
 
 ---
 
 ## 🛠️ 免驱配置与内置上位机
 
-插入电脑端（主机 B 端）后，Windows 会自动弹出 1MB 虚拟 U 盘：
+### 方式一：图形控制台 [`tools/WirelessDAP_Tool.exe`](tools/WirelessDAP_Tool.exe)（推荐）
+直接双击打开虚拟磁盘中或仓库 [`tools/WirelessDAP_Tool.exe`](tools/WirelessDAP_Tool.exe)（免安装单文件，无外部 DLL 依赖），即可实时查看链路健康遥测、扫描干净信道、同步配对参数、切换 `PIN_MODE` / `RF_PHY` / `SWD_10M` / `ROLE` 以及**一键进入 Bootloader**。
 
-### 方式一：使用内置图形上位机（推荐）
-直接在虚拟磁盘根目录（或仓库 [`tools/DAPLINK.exe`](tools/DAPLINK.exe)）双击打开 **`DAPLINK.exe`**：
-* 30KB 极简原生 Win32 程序，无任何 DLL 或运行时依赖。
-* 可视化修改：**配对码 (Pair Code)**、**通信信道 (Channel 0~80)**、**发射功率 (Tx Power)**、**运行角色 (AUTO 自动协商 / 角色A 主机发起端 / 角色B 从机响应端)**、**DAP 协议版本 (v1 HID / v2 WinUSB Bulk)**。
-* 特别针对**双车模块/纯硬件串口透传**场景：分别将两板设为**角色A**与**角色B**，两板仅接串口引脚（TX/RX）即可无线无缝对连，不接任何电脑 USB 也能永不掉线、绝不降级。
-* 点击 **保存并重启**，配置将写入片上 Flash 掉电保存，探针自动重启生效。
+### 方式二：文本修改 `CONFIG.TXT`
+打开虚拟磁盘 `DAPCFG` 中的 `CONFIG.TXT` 修改并保存（`Ctrl+S`）即可实时写入双槽位 Flash：
 
-### 方式二：直接修改文本
-记事本打开虚拟磁盘中的 `CONFIG.TXT`，修改对应键值（如 `CHANNEL=80`、`ROLE=ROLE_A`、`PROTOCOL=2`）后保存，探针将在 2 秒后自动写入 Flash 并重启。
+| 参数 | 取值范围 | 默认值 | 说明 |
+| :--- | :--- | :---: | :--- |
+| `PAIR_CODE` | 1..15 位 ASCII | `123456` | 配对码（两端须一致） |
+| `CHANNEL` | `0..100` | `80` | 射频频点（`2400 + CHANNEL` MHz） |
+| `TX_POWER` | `8, 4, 0, -4, -8, -12, -16, -20` | `8` | 发射功率（dBm） |
+| `ROLE` | `AUTO` / `TX` / `RX` | `AUTO` | 角色模式（`AUTO` 自动协商 / 固定主从） |
+| `UART_BAUD` | `9600..1000000` | `115200` | 无 PC 串口连接时的默认透传波特率 |
+| `AUTO_HOP` | `1` / `0` | `1` | 高干扰自动跳频开关 |
+| `RF_PHY` | `AUTO` / `1M` / `2M` | `AUTO` | 射频速率（`AUTO` 近距 2M / 弱信号切 1M） |
+| `PIN_MODE` | `LEFT_HS` / `RIGHT_LP` | `LEFT_HS` | 引脚配置方案 |
+| `SWD_10M` | `8M` / `16M` | `8M` | Keil 选 `10MHz` 时有线 SWD 频率映射 |
 
 ---
 
 ## 💻 源码构建与单元测试
 
-本项目提供完整的构建与自动化单元测试套件：
-
-### 1. 运行回归测试（需 MinGW / g++）
-在 PowerShell 中运行根目录测试脚本，验证协议栈与无线状态机：
 ```powershell
 .\run_tests.ps1
-```
-*已覆盖的 9 大测试用例（100% PASS）：*
-- `free_role_test`：自由角色自适应探测与竞选
-- `packet128_test`：大包吞吐与 4 包并发窗口
-- `recovery_test`：断网超时、断线重连与丢包重传
-- `uart_latency_test`：1ms 短帧合包与全双工回显
-- `uart_timing_probe`：串口精确时序与速率测试
-- `config_disk_test`：1MB 虚拟文件系统、FAT12 一致性及 Flash 持久化
-- `afh_test`：AFH 智能自适应跳频全信道正交性校验
-- `usb_compat_test`：WinUSB 零长包 (ZLP) 与响应序列化
-- `radio_test`：Nordic ESB 状态机 1000 轮随机全双工压力测试
-
-### 2. 从源码重新编译固件
-```powershell
-# 编译并生成 v4.3 稳定版 UF2 固件
 .\build.ps1
 ```
-构建产物将输出至 `firmware/` 目录并自动通过 UF2 格式与 SHA256 结构校验。
 
 ---
 
 ## 📚 详细文档导航
 
 * [接线与 Keil MDK 详细配置指南](docs/USAGE.md)
+* [预编译固件清单与 SHA-256 校验](firmware/README.md)
+* [有线与无线实测性能对比表](docs/DAPLink_Wired_Wireless_Benchmark_v7.1.0.xlsx)
 * [源码构建与编译选项说明](docs/BUILD.md)
 * [核心架构与协议设计](docs/DEVELOPMENT.md)
 * [测试与工程验证方法](docs/VALIDATION.md)
@@ -135,4 +131,4 @@
 
 ## 📄 开源许可证
 
-本项目核心源码遵循 [Apache License 2.0](LICENSE) 许可协议开源。CMSIS-DAP 协议层源码版权归 ARM 所有。
+本项目遵循仓库根目录 [LICENSE](LICENSE) 许可协议。CMSIS-DAP 协议层版权归 ARM 所有。
