@@ -1,4 +1,4 @@
-# 接线与使用详细教程 (`v7.1.0`)
+# 接线与使用详细教程 (`v7.1.1`)
 
 本项目采用**对等单固件设计**，两块 nRF52840 开发板刷入完全相同的固件即可协同工作，不绑定硬件序列号（目标端接目标单片机，主机端插电脑 USB，两块板可互换角色，也可设为固定 `TX`/`RX`）。
 
@@ -40,7 +40,7 @@
 1. 用带数据传输功能的 Type-C 数据线将开发板连接到电脑。
 2. **0.5 秒内快速短接两次 `RST` 与 `GND`**（或双击物理 `RST` 按钮）。
 3. 开发板进入 Bootloader 模式，电脑会弹出名为 `NICENANO` 或 `NRF52BOOT` 的可移动磁盘。
-4. 将仓库 [`firmware/wireless_daplink_v7.1.0_hs_pins.uf2`](../firmware/wireless_daplink_v7.1.0_hs_pins.uf2) 直接拖拽复制到该磁盘中，开发板会自动完成刷写并重启。
+4. 将仓库 [`firmware/wireless_daplink_v7.1.1_hs_pins.uf2`](../firmware/wireless_daplink_v7.1.1_hs_pins.uf2) 直接拖拽复制到该磁盘中，开发板会自动完成刷写并重启。
 5. **两块开发板均按此步骤刷入同一份固件！**
 6. 后续升级固件可在 `WirelessDAP_Tool.exe` 点击**一键进入 Bootloader**，或用串口助手以 **`1200 bps`** 打开虚拟串口并维持 `>= 60 ms` 自动进入 Bootloader。
 

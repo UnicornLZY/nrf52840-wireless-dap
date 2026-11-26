@@ -1,8 +1,8 @@
-# nRF52840 Wireless CMSIS-DAP v2 + CDC UART (`v7.1.0`)
+# nRF52840 Wireless CMSIS-DAP v2 + CDC UART (`v7.1.1`)
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Unit Tests](https://img.shields.io/badge/Tests-13%2F13%20PASS-brightgreen.svg)](tests/)
-[![Firmware](https://img.shields.io/badge/UF2-v7.1.0%20Stable-orange.svg)](firmware/)
+[![Firmware](https://img.shields.io/badge/UF2-v7.1.1%20Stable-orange.svg)](firmware/)
 
 使用两块 SuperMini / ProMicro（nice!nano 兼容）**Nordic nRF52840** 开发板实现的**对等有线 / 无线二合一 CMSIS-DAP v2.1.2 调试器**与**全双工无线虚拟串口（CDC ACM UART）**。
 
@@ -10,11 +10,11 @@
 
 ---
 
-## 🌟 核心特性与技术亮点 (`v7.1.0`)
+## 🌟 核心特性与技术亮点 (`v7.1.1`)
 
 * **左高速射频隔离排针（`LEFT_HS` 默认主力 + `RIGHT_LP` 兼容切换）**：将全部 SWD / UART 高频信号迁出射频与晶振耦合区，实测无线烧录 480 KB 固件 **26,262 帧 `0.00%` 空口重传、零失败**；同时支持通过 `WirelessDAP_Tool.exe` 或 `CONFIG.TXT` 热切换为老版右排针（`RIGHT_LP`）。
 * **无线吞吐全面领先**：`240B` 净荷 × `6` 槽位无线空口流水线，在 `STM32F411CEUx`（`@5MHz` SWD）实测 64KB SRAM 写入 **`96.85 KB/s`**、读取 **`85.11 KB/s`**、480KB 校验 **`84.84 KB/s`**、480KB 整片烧录 **`34.762s`**。
-* **有线硬件 `SPIM3` 加速 + `SWD_10M` 双策略可选（`8M` 默认 / `16M` 超频）**：有线 `1024B × 8` 流式封包；Keil 选择 `10MHz` 时默认跑 `8MHz` 稳态（兼顾长线与扩展板，480KB 综合速率达 `16MHz` 的 `95.1%`），也可一键切至 `16MHz` 超频（SRAM 读取 **`228.50 KB/s`**、480KB 校验 **`231.75 KB/s`**、整片耗时 **`19.857s`**）。
+* **有线硬件 `SPIM3` 加速 + `SWD_10M` 双策略可选（`8M` 默认 / `16M` 超频）**：有线采用标准 CMSIS-DAP v2 `512B × 8` 流式封包（兼容 Keil MDK 下 **TI MSPM0G3507** 等大 `.FLM` 算法芯片全频段有线烧录，同步优化 `8MHz` 包头时序与协议错误退避）；Keil 选择 `10MHz` 时默认跑 `8MHz` 稳态（兼顾长线与扩展板），也可一键切至 `16MHz` 超频。
 * **无线全双工串口 32KB 流控 + USB `NAK` 硬背压零丢包**：实测 **`2400 ~ 1,000,000 bps`**（14 档）双向零误码；`64KB @1M` 无流控死灌下行 **`76.50 KB/s`** / 上行 **`67.47 KB/s`**（USB-USB 下行 `86.59` / 上行 `69.91 KB/s`，峰值 `118.27 KB/s`），45 秒 `@460800 + SWD` 高负载混合烤机 **23,116 帧（1.48 MB）零坏包、零缺口、RF 零重传**。
 * **`RF_PHY` 双速率自适应（`AUTO` / `1M` / `2M`）+ `AFH` 自适应跳频**：`AUTO` 模式近距使用 `2 Mbps` 满速传输，弱信号自动降速 `1 Mbps` 抗衰减；遭遇同频干扰时支持信道扫描与自动跳频。
 * **免接 `NRST` 兼容 `Reset and Run`**：即使未接硬件复位线，也可自动识别 Keil 下载结束脉冲序列并触发 4 线 SWD `SYSRESETREQ`。
@@ -58,7 +58,7 @@
 | 480KB 整片总耗时 / 综合速率 | `33.283 s`（`14.42 KB/s`） | `34.762 s`（`13.81 KB/s`） | `49.268 s`（`9.74 KB/s`） |
 | 480KB 空口重传率 | — | **`0.00%`**（26,262 帧零重传） | `20.71%` |
 
-### 2. 有线直连实测对比（`LEFT_HS` · `SPIM3` + `1024B × 8`）
+### 2. 有线直连实测对比（`LEFT_HS` · `SPIM3`）
 
 | 测试指标 | `5 MHz` | `10M → 8MHz`（默认稳态） | `10M → 16MHz`（超频） |
 | :--- | :---: | :---: | :---: |
@@ -76,13 +76,13 @@
 
 ## 🚀 极速上手：拖拽刷入固件 (UF2)
 
-* **最新稳定版固件**：[`firmware/wireless_daplink_v7.1.0_hs_pins.uf2`](firmware/wireless_daplink_v7.1.0_hs_pins.uf2)（`540,160 bytes`）
-* **SHA-256**：`00D69192234DC57CEF55F2A0B8B0365F9FC14F029E3C3FB0112684A50A26E2ED`
+* **最新稳定版固件**：[`firmware/wireless_daplink_v7.1.1_hs_pins.uf2`](firmware/wireless_daplink_v7.1.1_hs_pins.uf2)（`540,672 bytes`）
+* **SHA-256**：`DF75B665A46E785687AA5C3ADA72A59F72C4D0AF798E56C74A79405C56D514B1`
 
 ### 刷录步骤：
 1. 用 USB 数据线将 nRF52840 开发板连接至电脑。
 2. **0.5 秒内快速短接两次 `RST` 与 `GND`**（或双击板载 `RST` 按键），弹出 `NICENANO` 或 `NRF52BOOT` 磁盘。
-3. 将 `wireless_daplink_v7.1.0_hs_pins.uf2` 拖入该磁盘，等待自动烧写并重启。
+3. 将 `wireless_daplink_v7.1.1_hs_pins.uf2` 拖入该磁盘，等待自动烧写并重启。
 4. **两块开发板请刷入同一版本固件**，并搭配 [`tools/WirelessDAP_Tool.exe`](tools/WirelessDAP_Tool.exe) 配置使用。
 
 ---
